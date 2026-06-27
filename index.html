@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A. Velaga | Personal Website</title>
+  <link rel="preconnect" href="https://images.unsplash.com">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="#home" aria-label="A. Velaga home">
+      <span class="brand-mark">AV</span>
+      <span>A. Velaga</span>
+    </a>
+
+    <button class="nav-toggle" type="button" aria-label="Open navigation" aria-expanded="false">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
+    <nav class="site-nav" aria-label="Main navigation">
+      <a href="#about">About</a>
+      <a href="#work">Work</a>
+      <a href="#contact">Contact</a>
+    </nav>
+  </header>
+
+  <main id="home">
+    <section class="hero">
+      <div class="hero-media" aria-hidden="true"></div>
+      <div class="hero-content">
+        <p class="eyebrow">Builder, learner, and problem solver</p>
+        <h1>A modern personal site for A. Velaga.</h1>
+        <p class="hero-copy">
+          I create practical digital experiences, explore AI-powered tools, and turn
+          ideas into useful projects with clean, focused execution.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="#work">View Work</a>
+          <a class="button secondary" href="#contact">Get in Touch</a>
+        </div>
+      </div>
+    </section>
+
+    <section class="section about-section" id="about">
+      <div class="section-heading">
+        <p class="eyebrow">About</p>
+        <h2>Focused on useful, well-designed technology.</h2>
+      </div>
+      <div class="about-grid">
+        <p>
+          This site is a lightweight starting point for your personal presence.
+          Update the text with your background, interests, resume highlights, or
+          current goals.
+        </p>
+        <div class="stats" aria-label="Profile highlights">
+          <div>
+            <strong>AI</strong>
+            <span>Exploration</span>
+          </div>
+          <div>
+            <strong>Web</strong>
+            <span>Projects</span>
+          </div>
+          <div>
+            <strong>2026</strong>
+            <span>Portfolio</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section work-section" id="work">
+      <div class="section-heading">
+        <p class="eyebrow">Selected Work</p>
+        <h2>Projects and interests worth sharing.</h2>
+      </div>
+      <div class="project-grid">
+        <article class="project-card">
+          <span class="project-tag">Web</span>
+          <h3>Personal Dashboard</h3>
+          <p>A clean interface for tracking ideas, tasks, and weekly priorities.</p>
+        </article>
+        <article class="project-card">
+          <span class="project-tag">AI</span>
+          <h3>AI Sandbox</h3>
+          <p>Experiments with prompts, prototypes, and small automation workflows.</p>
+        </article>
+        <article class="project-card">
+          <span class="project-tag">Design</span>
+          <h3>Portfolio Refresh</h3>
+          <p>A responsive website foundation with polished sections and interactions.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section contact-section" id="contact">
+      <div>
+        <p class="eyebrow">Contact</p>
+        <h2>Have an idea or opportunity?</h2>
+        <p>Use this section for your email, LinkedIn, GitHub, or any preferred contact link.</p>
+      </div>
+      <a class="button primary" href="mailto:hello@example.com">Email Me</a>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; <span id="year"></span> A. Velaga. Built with HTML, CSS, and JavaScript.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
