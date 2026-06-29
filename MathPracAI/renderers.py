@@ -1,4 +1,5 @@
 from html import escape
+import json
 
 from models import encoded_problem
 
@@ -36,11 +37,12 @@ def select_options(options, selected):
     return "\n".join(html)
 
 
-def custom_dropdown(name, label, options, selected):
+def custom_dropdown(name, label, options, selected, option_attrs=None):
     selected_label = next((option_label for value, option_label in options if value == selected), options[0][1])
     option_markup = []
     for index, (value, option_label) in enumerate(options):
         is_selected = value == selected
+        extra_attrs = f" {option_attrs(value, option_label, index)}" if option_attrs else ""
         option_markup.append(
             f"""
             <button
@@ -51,6 +53,7 @@ def custom_dropdown(name, label, options, selected):
               data-value="{escape(value)}"
               aria-selected="{str(is_selected).lower()}"
               tabindex="-1"
+              {extra_attrs}
             >{escape(option_label)}</button>"""
         )
 
@@ -127,10 +130,9 @@ def render_control_panel(context, units, difficulties):
     unit_options = tuple((value, data["label"]) for value, data in units.items())
     topic_options = tuple(units[unit]["topics"])
     difficulty_options = tuple((item, item.title()) for item in difficulties)
-    unit_dropdown = custom_dropdown("unit", "Unit", unit_options, unit)
+    unit_dropdown = custom_dropdown("unit", "Unit", unit_options, unit, unit_option_attrs(units))
     topic_dropdown = custom_dropdown("topic", "Topic", topic_options, topic)
     difficulty_dropdown = custom_dropdown("difficulty", "Difficulty", difficulty_options, difficulty)
-    generate_disabled = " disabled" if context["generated"] else ""
 
     return f"""      <form class="control-panel" action="/generate" method="get">
         <div class="panel-title">
@@ -143,8 +145,14 @@ def render_control_panel(context, units, difficulties):
         {unit_dropdown}
         {topic_dropdown}
         {difficulty_dropdown}
-        <button type="submit" data-generate-button{generate_disabled}>Generate Practice Problems</button>
       </form>"""
+
+
+def unit_option_attrs(units):
+    def attrs(value, _label, _index):
+        return f"data-topics='{escape(json.dumps(units[value]['topics']))}'"
+
+    return attrs
 
 
 def render_answer_form(context):
@@ -162,6 +170,7 @@ def render_answer_form(context):
     skip_disabled = " disabled" if solution_visible or correct_checked else ""
     check_disabled = " disabled" if solution_visible or correct_checked else ""
     next_disabled = "" if correct_checked or solution_visible else " disabled"
+    answer_controls = render_answer_controls(problem)
 
     return f"""        <form class="answer-panel" action="/check" method="post">
           <input type="hidden" name="unit" value="{escape(unit)}">
@@ -176,9 +185,8 @@ def render_answer_form(context):
           <input type="hidden" name="incorrect_count" value="{context["incorrect_count"]}">
           <input type="hidden" name="skip_count" value="{context["skip_count"]}">
           <input type="hidden" name="generated" value="{str(generated).lower()}">
-          <label for="user_answer">answer_input</label>
           <div class="answer-row">
-            <input id="user_answer" name="user_answer" type="text" autocomplete="off" placeholder="type answer">
+            {answer_controls}
             <button name="action" value="check" type="submit"{check_disabled}>Check</button>
           </div>
           <div class="utility-row">
@@ -188,6 +196,44 @@ def render_answer_form(context):
             <button name="action" value="next" type="submit"{next_disabled}>Next Problem</button>
           </div>
         </form>"""
+
+
+def render_answer_controls(problem):
+    fields = problem.answer_fields or [{"name": "user_answer", "label": "Answer", "type": "text"}]
+    if len(fields) == 1:
+        return render_answer_control(fields[0], "user_answer")
+
+    return f"""<div class="answer-fields">
+              {''.join(render_labeled_answer_control(field) for field in fields)}
+            </div>"""
+
+
+def render_labeled_answer_control(field):
+    field_name = field.get("name", "answer")
+    field_id = f"answer_{field_name}"
+    return f"""<div class="answer-field">
+                <label for="{escape(field_id)}">{escape(field.get("label", "Answer"))}</label>
+                <div class="answer-field-row">
+                  {render_answer_control(field, field_name, field_id)}
+                </div>
+              </div>"""
+
+
+def render_answer_control(field, field_name, field_id="user_answer"):
+    helpers = field.get("helpers") if isinstance(field, dict) else None
+    helper_buttons = render_answer_helpers(helpers if isinstance(helpers, list) else [])
+    return f"""<input id="{escape(field_id)}" name="{escape(field_name)}" type="{escape(field.get("type", "text"))}" autocomplete="off" placeholder="type answer">
+              {helper_buttons}"""
+
+
+def render_answer_helpers(helpers):
+    if not helpers:
+        return ""
+    buttons = "".join(
+        f'<button type="button" data-answer-helper="{escape(str(helper))}">{escape(str(helper))}</button>'
+        for helper in helpers
+    )
+    return f'<div class="answer-helper-row">{buttons}</div>'
 
 
 def render_feedback(context):

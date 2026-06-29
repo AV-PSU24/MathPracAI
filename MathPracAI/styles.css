@@ -310,6 +310,47 @@ h1 {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px;
   gap: 12px;
+  align-items: center;
+}
+
+.answer-row > button {
+  align-self: center;
+  min-height: 44px;
+}
+
+.answer-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.answer-field {
+  display: grid;
+  gap: 6px;
+}
+
+.answer-field-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 44px);
+  gap: 6px;
+  align-items: center;
+}
+
+.answer-helper-row {
+  display: contents;
+}
+
+.answer-helper-row button {
+  width: 44px;
+  min-height: 34px;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.utility-row {
+  margin-top: 6px;
+  gap: 12px;
 }
 
 .utility-row button {
@@ -458,6 +499,14 @@ h1 {
 
   .answer-row {
     grid-template-columns: 1fr;
+  }
+
+  .answer-field-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 40px);
+  }
+
+  .answer-helper-row button {
+    width: 40px;
   }
 
   .utility-row button {

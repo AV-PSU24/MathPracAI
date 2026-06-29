@@ -2,6 +2,14 @@ def signed(value):
     return f"- {abs(value)}" if value < 0 else f"+ {value}"
 
 
+def signed_compact(value):
+    return f" - {abs(value)}" if value < 0 else f" + {value}"
+
+
+def signed_group_shift(value):
+    return f" - {abs(value)}" if value < 0 else f" + {value}"
+
+
 def superscript_number(value):
     digits = str(value)
     superscripts = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
@@ -55,3 +63,39 @@ def format_function_substitution(coefficients, x):
         else:
             pieces.append(f" {'-' if coefficient < 0 else '+'} {body}")
     return "".join(pieces) if pieces else "0"
+
+
+def format_linear_equation(function_data):
+    m = function_data["m"]
+    b = function_data["b"]
+    if m == 1:
+        slope = "x"
+    elif m == -1:
+        slope = "-x"
+    else:
+        slope = f"{m}x"
+    return f"f(x) = {slope}{signed_compact(b)}" if b else f"f(x) = {slope}"
+
+
+def format_quadratic_vertex_equation(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    coefficient = "" if a == 1 else "-" if a == -1 else str(a)
+    return f"f(x) = {coefficient}(x{signed_group_shift(-h)})²{signed_compact(k)}" if k else f"f(x) = {coefficient}(x{signed_group_shift(-h)})²"
+
+
+def format_absolute_value_equation(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    coefficient = "" if a == 1 else "-" if a == -1 else str(a)
+    return f"f(x) = {coefficient}|x{signed_group_shift(-h)}|{signed_compact(k)}" if k else f"f(x) = {coefficient}|x{signed_group_shift(-h)}|"
+
+
+def format_square_root_equation(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    coefficient = "" if a == 1 else "-" if a == -1 else str(a)
+    return f"f(x) = {coefficient}sqrt(x{signed_group_shift(-h)}){signed_compact(k)}" if k else f"f(x) = {coefficient}sqrt(x{signed_group_shift(-h)})"

@@ -57,12 +57,62 @@ function selectOption(dropdown, option) {
     badge.textContent = labelText;
   });
 
-  document.querySelectorAll("[data-generate-button]").forEach((button) => {
-    button.disabled = false;
-  });
-
   closeDropdown(dropdown);
   trigger.focus();
+
+  if (fieldName === "unit") {
+    updateTopicsForUnit(option);
+    return;
+  }
+
+  if (fieldName === "topic" || fieldName === "difficulty") {
+    submitPracticeConfig(dropdown);
+  }
+}
+
+function submitPracticeConfig(dropdown) {
+  const form = dropdown.closest("form");
+  if (form) {
+    form.submit();
+  }
+}
+
+function updateTopicsForUnit(unitOption) {
+  const form = unitOption.closest("form");
+  const topicDropdown = form?.querySelector('[data-dropdown] input[name="topic"]')?.closest("[data-dropdown]");
+  if (!topicDropdown || !unitOption.dataset.topics) {
+    return;
+  }
+
+  const topics = JSON.parse(unitOption.dataset.topics);
+  const topicHiddenInput = topicDropdown.querySelector('input[type="hidden"]');
+  const topicSelectedLabel = topicDropdown.querySelector("[data-selected-label]");
+  const topicOptions = topicDropdown.querySelector(".custom-options");
+
+  topicOptions.innerHTML = topics.map(([value, label], index) => `
+            <button
+              class="custom-option"
+              id="topic-option-${index}"
+              role="option"
+              type="button"
+              data-value="${value}"
+              aria-selected="${index === 0 ? "true" : "false"}"
+              tabindex="-1"
+            >${label}</button>`).join("");
+
+  topicHiddenInput.value = topics[0][0];
+  topicSelectedLabel.textContent = topics[0][1];
+
+  document.querySelectorAll('input[name="topic"]').forEach((input) => {
+    input.value = topics[0][0];
+  });
+
+  document.querySelectorAll('[data-badge="topic"]').forEach((badge) => {
+    badge.textContent = topics[0][1];
+  });
+
+  bindDropdownOptions(topicDropdown);
+  selectOption(topicDropdown, topicOptions.querySelector(".custom-option"));
 }
 
 function moveFocus(dropdown, direction) {
@@ -75,29 +125,9 @@ function moveFocus(dropdown, direction) {
   options[nextIndex].focus();
 }
 
-dropdowns.forEach((dropdown) => {
+function bindDropdownOptions(dropdown) {
   const trigger = dropdown.querySelector(".custom-select-trigger");
   const options = dropdown.querySelectorAll(".custom-option");
-
-  trigger.addEventListener("click", () => {
-    toggleDropdown(dropdown);
-  });
-
-  trigger.addEventListener("keydown", (event) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      toggleDropdown(dropdown);
-    }
-
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      openDropdown(dropdown);
-    }
-
-    if (event.key === "Escape") {
-      closeDropdown(dropdown);
-    }
-  });
 
   options.forEach((option) => {
     option.addEventListener("click", () => {
@@ -126,12 +156,70 @@ dropdowns.forEach((dropdown) => {
       }
     });
   });
+}
+
+dropdowns.forEach((dropdown) => {
+  const trigger = dropdown.querySelector(".custom-select-trigger");
+
+  trigger.addEventListener("click", () => {
+    toggleDropdown(dropdown);
+  });
+
+  trigger.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      toggleDropdown(dropdown);
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      openDropdown(dropdown);
+    }
+
+    if (event.key === "Escape") {
+      closeDropdown(dropdown);
+    }
+  });
+
+  bindDropdownOptions(dropdown);
 });
 
 document.addEventListener("click", (event) => {
   dropdowns.forEach((dropdown) => {
     if (!dropdown.contains(event.target)) {
       closeDropdown(dropdown);
+    }
+  });
+});
+
+let currentAnswerInput = null;
+
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches(".answer-panel input[type='text']")) {
+    currentAnswerInput = event.target;
+  }
+});
+
+function insertAtCursor(input, value) {
+  const start = input.selectionStart ?? input.value.length;
+  const end = input.selectionEnd ?? input.value.length;
+
+  input.value = `${input.value.slice(0, start)}${value}${input.value.slice(end)}`;
+  input.focus();
+  input.setSelectionRange(start + value.length, start + value.length);
+}
+
+document.querySelectorAll("[data-answer-helper]").forEach((button) => {
+  button.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+
+  button.addEventListener("click", () => {
+    const input = button.closest(".answer-field")?.querySelector("input[type='text']")
+      || currentAnswerInput
+      || button.closest(".answer-row")?.querySelector("input[type='text']");
+    if (input) {
+      insertAtCursor(input, button.dataset.answerHelper);
     }
   });
 });

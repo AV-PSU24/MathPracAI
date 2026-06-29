@@ -86,6 +86,13 @@ def parse_post(handler):
     return {key: values[0] for key, values in parse_qs(body).items()}
 
 
+def user_answer_from_form(data, problem):
+    fields = problem.answer_fields or []
+    if len(fields) <= 1:
+        return data.get("user_answer", "")
+    return {field.get("name", ""): data.get(field.get("name", ""), "") for field in fields}
+
+
 class MathPracHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
@@ -139,7 +146,7 @@ class MathPracHandler(BaseHTTPRequestHandler):
         data = parse_post(self)
         problem = problem_from_form(data)
         action = data.get("action", "check")
-        user_answer = data.get("user_answer", "")
+        user_answer = user_answer_from_form(data, problem)
         state = {
             "unit": data.get("unit", "unit1"),
             "topic": data.get("topic", "evaluating_functions"),
