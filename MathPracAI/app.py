@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
 import os
 from pathlib import Path
 from random import randint
@@ -26,79 +27,220 @@ DIFFICULTIES = ("easy", "medium", "hard")
 
 @dataclass
 class Problem:
-    question: str
-    answer: str
-    hint: str
-    solution: str
+    topic: str
+    problem_type: str
+    difficulty: str
+    display_equation: str
+    prompt: str
+    answer_fields: list[dict] = field(default_factory=list)
+    correct_answer: str = ""
+    acceptable_answers: list[str] = field(default_factory=list)
+    hint: str = ""
+    solution: str = ""
+    metadata: dict = field(default_factory=dict)
+    assets: list[dict] = field(default_factory=list)
 
+    @property
+    def question(self):
+        if self.topic == "evaluating_functions":
+            return f"{self.display_equation}\n\n{self.prompt}"
+        return self.metadata.get("current_display", self.prompt)
 
-def random_range(difficulty, ranges):
-    low, high = ranges[difficulty]
-    return randint(low, high)
+    @property
+    def answer(self):
+        return self.correct_answer
 
 
 def signed(value):
     return f"- {abs(value)}" if value < 0 else f"+ {value}"
 
 
-def compact_signed(value):
-    return f"-{abs(value)}" if value < 0 else f"+{value}"
+@dataclass(frozen=True)
+class EvaluatingFunctionsProblemType:
+    topic: str = "evaluating_functions"
+    problem_type: str = "evaluate_function"
+    supported_families: tuple[str, ...] = ("linear", "quadratic", "polynomial")
+
+    def degree_for(self, difficulty):
+        if difficulty == "easy":
+            return randint(1, 2)
+        if difficulty == "medium":
+            return randint(2, 3)
+        return randint(4, 5)
+
+    def family_for_degree(self, degree):
+        if degree == 1:
+            return "linear"
+        if degree == 2:
+            return "quadratic"
+        return "polynomial"
+
+    def generate(self, difficulty):
+        degree = self.degree_for(difficulty)
+        family = self.family_for_degree(degree)
+        coefficient_limit = 4 if difficulty == "easy" else 7
+        input_value = randint(-4 if difficulty != "easy" else 1, 6 if difficulty == "easy" else 8)
+        coefficients = [randint(1, coefficient_limit)]
+        for _exponent in range(degree - 1, -1, -1):
+            coefficients.append(randint(-10, 10))
+
+        return {
+            "family": family,
+            "coefficients": coefficients,
+            "input_value": input_value,
+            "correct_answer": evaluate_polynomial(coefficients, input_value),
+        }
 
 
-def complex_value(real, imaginary):
-    return f"{real}{compact_signed(imaginary)}i"
+EVALUATING_FUNCTIONS_PROBLEM_TYPE = EvaluatingFunctionsProblemType()
 
 
-def create_problem(question, answer, hint, solution):
-    return Problem(question, str(answer), hint, solution)
+def evaluate_polynomial(coefficients, x):
+    value = 0
+    degree = len(coefficients) - 1
+    for index, coefficient in enumerate(coefficients):
+        exponent = degree - index
+        value += coefficient * (x**exponent)
+    return value
+
+
+def superscript_number(value):
+    digits = str(value)
+    superscripts = str.maketrans("0123456789-", "⁰¹²³⁴⁵⁶⁷⁸⁹⁻")
+    return digits.translate(superscripts)
+
+
+def polynomial_term(coefficient, exponent, is_first):
+    sign = "-" if coefficient < 0 else "+"
+    absolute = abs(coefficient)
+
+    if exponent == 0:
+        body = str(absolute)
+    elif exponent == 1:
+        body = "x" if absolute == 1 else f"{absolute}x"
+    else:
+        body = f"x{superscript_number(exponent)}" if absolute == 1 else f"{absolute}x{superscript_number(exponent)}"
+
+    if is_first:
+        return f"-{body}" if sign == "-" else body
+    return f" {sign} {body}"
+
+
+def format_function_equation(coefficients):
+    degree = len(coefficients) - 1
+    terms = []
+    for index, coefficient in enumerate(coefficients):
+        if coefficient == 0:
+            continue
+        terms.append(polynomial_term(coefficient, degree - index, not terms))
+    return f"f(x) = {''.join(terms) if terms else '0'}"
+
+
+def render_evaluating_functions_problem(data, difficulty):
+    coefficients = data["coefficients"]
+    input_value = data["input_value"]
+    correct_answer = data["correct_answer"]
+    equation = format_function_equation(coefficients)
+    prompt = f"Evaluate f({input_value})."
+    substitution = format_function_substitution(coefficients, input_value)
+
+    return create_problem(
+        topic=EVALUATING_FUNCTIONS_PROBLEM_TYPE.topic,
+        problem_type=EVALUATING_FUNCTIONS_PROBLEM_TYPE.problem_type,
+        difficulty=difficulty,
+        display_equation=equation,
+        prompt=prompt,
+        answer_fields=[{"name": "value", "label": "Answer", "type": "text"}],
+        correct_answer=correct_answer,
+        acceptable_answers=[correct_answer],
+        hint="Substitute the input value anywhere x appears.",
+        solution=f"f({input_value}) = {substitution} = {correct_answer}.",
+        metadata=data,
+    )
+
+
+def format_function_substitution(coefficients, x):
+    degree = len(coefficients) - 1
+    pieces = []
+    for index, coefficient in enumerate(coefficients):
+        exponent = degree - index
+        if coefficient == 0:
+            continue
+
+        absolute = abs(coefficient)
+        if exponent == 0:
+            body = str(absolute)
+        elif exponent == 1:
+            body = f"{absolute}({x})"
+        else:
+            body = f"{absolute}({x}){superscript_number(exponent)}"
+
+        if not pieces:
+            pieces.append(f"-{body}" if coefficient < 0 else body)
+        else:
+            pieces.append(f" {'-' if coefficient < 0 else '+'} {body}")
+    return "".join(pieces) if pieces else "0"
+
+
+def create_problem(
+    topic,
+    problem_type,
+    difficulty,
+    display_equation,
+    prompt,
+    answer_fields,
+    correct_answer,
+    acceptable_answers,
+    hint,
+    solution,
+    metadata=None,
+    assets=None,
+):
+    answers = [str(answer) for answer in acceptable_answers]
+    correct = str(correct_answer)
+    if correct not in answers:
+        answers.insert(0, correct)
+
+    return Problem(
+        topic=topic,
+        problem_type=problem_type,
+        difficulty=difficulty,
+        display_equation=display_equation,
+        prompt=prompt,
+        answer_fields=answer_fields,
+        correct_answer=correct,
+        acceptable_answers=answers,
+        hint=hint,
+        solution=solution,
+        metadata=metadata or {},
+        assets=assets or [],
+    )
 
 
 def evaluating_functions(difficulty):
-    a = randint(1, 4 if difficulty == "easy" else 7)
-    b = randint(-6, 8)
-    c = randint(-10, 10)
-    x = randint(-4 if difficulty != "easy" else 1, 6 if difficulty == "easy" else 8)
-    value = a * x * x + b * x + c
-    return create_problem(
-        f"Evaluate f({x}) if f(x) = {a}x^2 {signed(b)}x {signed(c)}.",
-        value,
-        "Substitute the input value anywhere x appears.",
-        f"f({x}) = {a}({x})^2 {signed(b)}({x}) {signed(c)} = {value}.",
-    )
+    data = EVALUATING_FUNCTIONS_PROBLEM_TYPE.generate(difficulty)
+    return render_evaluating_functions_problem(data, difficulty)
 
 
 def domain_and_range(difficulty):
     start = randint(-8, 4)
+    equation = f"f(x) = sqrt(x {signed(-start)})"
     return create_problem(
-        f"State the domain of f(x) = sqrt(x {signed(-start)}). Use x>=a format.",
-        f"x>={start}",
-        "For a square root, the expression inside the radical must be greater than or equal to 0.",
-        f"x {signed(-start)} >= 0, so x >= {start}.",
-    )
-
-
-def intercepts(difficulty):
-    m = randint(1, 8 if difficulty == "hard" else 5)
-    x_intercept = randint(-6, 6)
-    b = -m * x_intercept
-    return create_problem(
-        f"Find the x-intercept of y = {m}x {signed(b)}. Enter the x-value only.",
-        x_intercept,
-        "Set y equal to 0 and solve for x.",
-        f"0 = {m}x {signed(b)}, so {m}x = {-b} and x = {x_intercept}.",
-    )
-
-
-def increasing_decreasing(difficulty):
-    slope = randint(1, 9)
-    if randint(0, 1):
-        slope *= -1
-    direction = "increasing" if slope > 0 else "decreasing"
-    return create_problem(
-        f"Is f(x) = {slope}x {signed(randint(-8, 8))} increasing or decreasing?",
-        direction,
-        "A linear function increases when its slope is positive and decreases when its slope is negative.",
-        f"The slope is {slope}, so the function is {direction}.",
+        topic="domain_and_range",
+        problem_type="square_root_domain",
+        difficulty=difficulty,
+        display_equation=equation,
+        prompt="State the domain. Use x>=a format.",
+        answer_fields=[{"name": "domain", "label": "Domain", "type": "text"}],
+        correct_answer=f"x>={start}",
+        acceptable_answers=[f"x>={start}"],
+        hint="For a square root, the expression inside the radical must be greater than or equal to 0.",
+        solution=f"x {signed(-start)} >= 0, so x >= {start}.",
+        metadata={
+            "function_family": "square_root",
+            "domain_start": start,
+            "current_display": f"State the domain of {equation}. Use x>=a format.",
+        },
     )
 
 
@@ -111,93 +253,26 @@ def parent_functions(difficulty):
     ]
     equation, answer = choices[randint(0, len(choices) - 1)]
     return create_problem(
-        f"Identify the parent function family for {equation}.",
-        answer,
-        "Ignore shifts, stretches, and reflections. Focus on the core shape.",
-        f"The core function family is {answer}.",
-    )
-
-
-def transformations(difficulty):
-    right = randint(1, 7)
-    up = randint(-6, 6)
-    return create_problem(
-        f"For g(x) = (x - {right})^2 {signed(up)}, describe the translation from f(x)=x^2. Use: right a, up b",
-        f"right {right}, up {up}",
-        "Inside the parentheses controls horizontal movement. The outside constant controls vertical movement.",
-        f"x - {right} shifts right {right}; {signed(up)} shifts vertically to up {up}.",
-    )
-
-
-def piecewise_functions(difficulty):
-    split = randint(-2, 3)
-    x = randint(split + 1, split + (4 if difficulty == "easy" else 8))
-    a = randint(2, 6)
-    b = randint(-5, 5)
-    value = a * x + b
-    return create_problem(
-        f"Given f(x)=x^2 for x <= {split}, and f(x)={a}x {signed(b)} for x > {split}, find f({x}).",
-        value,
-        f"Since {x} is greater than {split}, use the second rule.",
-        f"f({x}) = {a}({x}) {signed(b)} = {value}.",
-    )
-
-
-def average_rate_of_change(difficulty):
-    a = randint(1, 4 if difficulty == "easy" else 7)
-    start = randint(-3, 3)
-    end = start + randint(2, 6)
-    f_start = a * start * start
-    f_end = a * end * end
-    answer = (f_end - f_start) // (end - start)
-    return create_problem(
-        f"Find the average rate of change of f(x)={a}x^2 from x={start} to x={end}.",
-        answer,
-        "Use [f(b)-f(a)] / [b-a].",
-        f"[f({end}) - f({start})] / [{end} - {start}] = [{f_end} - {f_start}] / {end - start} = {answer}.",
-    )
-
-
-def composition_of_functions(difficulty):
-    a = randint(2, 6)
-    b = randint(-5, 5)
-    c = randint(2, 5)
-    d = randint(-5, 5)
-    x = randint(1, 6 if difficulty == "easy" else 10)
-    gx = c * x + d
-    answer = a * gx + b
-    return create_problem(
-        f"If f(x)={a}x {signed(b)} and g(x)={c}x {signed(d)}, find f(g({x})).",
-        answer,
-        "Evaluate the inside function first, then plug that result into the outside function.",
-        f"g({x}) = {gx}. Then f({gx}) = {a}({gx}) {signed(b)} = {answer}.",
-    )
-
-
-def inverse_functions(difficulty):
-    a = randint(2, 8)
-    b = randint(-10, 10)
-    x = randint(1, 9)
-    y = a * x + b
-    return create_problem(
-        f"If f(x) = {a}x {signed(b)}, find f^-1({y}).",
-        x,
-        "An inverse reverses the output back to the original input.",
-        f"Set {y} = {a}x {signed(b)}. Then {a}x = {y - b}, so x = {x}.",
+        topic="parent_functions",
+        problem_type="identify_parent_family",
+        difficulty=difficulty,
+        display_equation=equation,
+        prompt="Identify the parent function family.",
+        answer_fields=[{"name": "family", "label": "Family", "type": "text"}],
+        correct_answer=answer,
+        acceptable_answers=[answer],
+        hint="Ignore shifts, stretches, and reflections. Focus on the core shape.",
+        solution=f"The core function family is {answer}.",
+        metadata={
+            "current_display": f"Identify the parent function family for {equation}.",
+        },
     )
 
 
 GENERATORS = {
     "evaluating_functions": evaluating_functions,
     "domain_and_range": domain_and_range,
-    "intercepts": intercepts,
-    "increasing_decreasing": increasing_decreasing,
     "parent_functions": parent_functions,
-    "transformations": transformations,
-    "piecewise_functions": piecewise_functions,
-    "average_rate_of_change": average_rate_of_change,
-    "composition_of_functions": composition_of_functions,
-    "inverse_functions": inverse_functions,
 }
 
 
@@ -244,6 +319,51 @@ def answers_match(user_answer, correct_answer):
         return sorted(user.split(",")) == sorted(correct.split(","))
 
     return False
+
+
+def answers_match_problem(user_answer, problem):
+    return any(answers_match(user_answer, answer) for answer in problem.acceptable_answers)
+
+
+def encoded_json(value):
+    return escape(json.dumps(value))
+
+
+def decoded_json(value, fallback):
+    try:
+        return json.loads(value)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return fallback
+
+
+def problem_from_form(data):
+    question = data.get("question", "")
+    answer = data.get("correct_answer") or data.get("answer", "")
+    metadata = decoded_json(data.get("metadata"), {})
+    problem_topic = data.get("problem_topic") or data.get("topic", "")
+    if question and problem_topic != "evaluating_functions" and "current_display" not in metadata:
+        metadata["current_display"] = question
+
+    return Problem(
+        topic=problem_topic,
+        problem_type=data.get("problem_type", ""),
+        difficulty=data.get("problem_difficulty") or data.get("difficulty", ""),
+        display_equation=data.get("display_equation", ""),
+        prompt=data.get("prompt") or question,
+        answer_fields=decoded_json(data.get("answer_fields"), [{"name": "answer", "label": "Answer", "type": "text"}]),
+        correct_answer=str(answer),
+        acceptable_answers=decoded_json(data.get("acceptable_answers"), [str(answer)]),
+        hint=data.get("hint", ""),
+        solution=data.get("solution", ""),
+        metadata=metadata,
+        assets=decoded_json(data.get("assets"), []),
+    )
+
+
+def render_problem_display(problem):
+    if problem.topic == "evaluating_functions":
+        return f"{escape(problem.display_equation)}<br><br>{escape(problem.prompt)}"
+    return escape(problem.question)
 
 
 def select_options(options, selected):
@@ -387,13 +507,23 @@ def render_page(state):
           <span data-badge="difficulty">{escape(difficulty.title())}</span>
         </div>
 
-        <h1>{escape(problem.question)}</h1>
+        <h1>{render_problem_display(problem)}</h1>
 
         <form class="answer-panel" action="/check" method="post">
           <input type="hidden" name="unit" value="{escape(unit)}">
           <input type="hidden" name="topic" value="{escape(topic)}">
           <input type="hidden" name="difficulty" value="{escape(difficulty)}">
           <input type="hidden" name="question" value="{escape(problem.question)}">
+          <input type="hidden" name="problem_topic" value="{escape(problem.topic)}">
+          <input type="hidden" name="problem_type" value="{escape(problem.problem_type)}">
+          <input type="hidden" name="problem_difficulty" value="{escape(problem.difficulty)}">
+          <input type="hidden" name="display_equation" value="{escape(problem.display_equation)}">
+          <input type="hidden" name="prompt" value="{escape(problem.prompt)}">
+          <input type="hidden" name="answer_fields" value="{encoded_json(problem.answer_fields)}">
+          <input type="hidden" name="correct_answer" value="{escape(problem.correct_answer)}">
+          <input type="hidden" name="acceptable_answers" value="{encoded_json(problem.acceptable_answers)}">
+          <input type="hidden" name="metadata" value="{encoded_json(problem.metadata)}">
+          <input type="hidden" name="assets" value="{encoded_json(problem.assets)}">
           <input type="hidden" name="answer" value="{escape(answer_value)}">
           <input type="hidden" name="hint" value="{escape(problem.hint)}">
           <input type="hidden" name="solution" value="{escape(problem.solution)}">
@@ -493,12 +623,7 @@ class MathPracHandler(BaseHTTPRequestHandler):
             return
 
         data = parse_post(self)
-        problem = Problem(
-            data.get("question", ""),
-            data.get("answer", ""),
-            data.get("hint", ""),
-            data.get("solution", ""),
-        )
+        problem = problem_from_form(data)
         action = data.get("action", "check")
         user_answer = data.get("user_answer", "")
         state = {
@@ -534,7 +659,7 @@ class MathPracHandler(BaseHTTPRequestHandler):
             state["skip_count"] = str(count_value(state, "skip_count") + 1)
             reset_for_new_problem(state)
             state["generated"] = "true"
-        elif answers_match(user_answer, problem.answer):
+        elif answers_match_problem(user_answer, problem):
             state["feedback"] = "Correct."
             state["feedback_type"] = "correct"
             state["correct_count"] = str(count_value(state, "correct_count") + 1)
