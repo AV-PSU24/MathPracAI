@@ -6,7 +6,12 @@ from urllib.parse import parse_qs, urlparse
 
 from generators import GENERATORS
 from models import problem_from_form
-from renderers import default_question_view_values, render_page, valid_question_view_values
+from renderers import (
+    default_question_view_values,
+    render_page,
+    topic_config_field_names,
+    valid_question_view_values,
+)
 from validators import answers_match_problem
 
 
@@ -109,10 +114,25 @@ def render_app_page(state):
     )
 
 
+def request_values_from_parsed(parsed_values):
+    config_fields = set(topic_config_field_names())
+    data = {}
+    for key, values in parsed_values.items():
+        if key in config_fields:
+            data[key] = tuple(values)
+        else:
+            data[key] = values[0]
+    return data
+
+
+def parse_query(query_string):
+    return request_values_from_parsed(parse_qs(query_string))
+
+
 def parse_post(handler):
     length = int(handler.headers.get("Content-Length", 0))
     body = handler.rfile.read(length).decode("utf-8")
-    return {key: values[0] for key, values in parse_qs(body).items()}
+    return request_values_from_parsed(parse_qs(body))
 
 
 def user_answer_from_form(data, problem):
@@ -140,7 +160,7 @@ class MathPracHandler(BaseHTTPRequestHandler):
             self.wfile.write((ROOT / "script.js").read_bytes())
             return
 
-        query = {key: values[0] for key, values in parse_qs(parsed.query).items()}
+        query = parse_query(parsed.query)
         if parsed.path in ("/", "/generate"):
             if parsed.path == "/generate":
                 unit = query.get("unit", "unit1")
@@ -195,6 +215,9 @@ class MathPracHandler(BaseHTTPRequestHandler):
             "question_view_graph": data.get("question_view_graph", ""),
             "active_question_view": data.get("active_question_view", ""),
         }
+        for field_name in topic_config_field_names():
+            if field_name in data:
+                state[field_name] = data[field_name]
 
         if action == "hint":
             state["feedback"] = ""

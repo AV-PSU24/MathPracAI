@@ -18,6 +18,10 @@ GRAPH_DEFAULT_X_MAX = 10
 GRAPH_DEFAULT_Y_MIN = -10
 GRAPH_DEFAULT_Y_MAX = 10
 GRAPH_EPSILON = 0.000001
+GRAPH_POINT_LABEL_HEIGHT = 16
+GRAPH_POINT_LABEL_CHAR_WIDTH = 7.2
+GRAPH_POINT_LABEL_MARGIN = 3
+GRAPH_POINT_LABEL_MIN_WIDTH = 32
 GRAPH_TOKEN_PATTERN = re.compile(
     r"""
     (?P<number>(?:\d+(?:\.\d*)?|\.\d+))
@@ -33,6 +37,36 @@ DEFAULT_QUESTION_VIEW_OPTIONS = (("equation", "Given equation"),)
 QUESTION_VIEW_OPTIONS_BY_TOPIC = {
     "domain_and_range": (("equation", "Given equation"), ("graph", "Given graph")),
 }
+TOPIC_CONFIG_SECTIONS_BY_TOPIC = {
+    "domain_and_range": (
+        {
+            "key": "functionFamilies",
+            "label": "Function Families",
+            "options": (
+                ("linear", "Linear"),
+                ("quadratic", "Quadratic"),
+                ("cubic", "Cubic"),
+            ),
+        },
+        {
+            "key": "functionStyles",
+            "label": "Function Style",
+            "options": (
+                ("simple", "Simple functions"),
+                ("transformations", "Transformations"),
+            ),
+        },
+        {
+            "key": "domainRestrictions",
+            "label": "Domain Restrictions",
+            "options": (
+                ("none", "No restriction"),
+                ("restricted_interval", "Restricted interval"),
+                ("union_of_intervals", "Union of intervals"),
+            ),
+        },
+    ),
+}
 
 
 def question_view_options_for_topic(topic):
@@ -45,6 +79,42 @@ def valid_question_view_values(topic):
 
 def default_question_view_values(topic):
     return valid_question_view_values(topic)
+
+
+def topic_config_sections(topic):
+    return TOPIC_CONFIG_SECTIONS_BY_TOPIC.get(topic, ())
+
+
+def topic_config_field_names():
+    return tuple(
+        section["key"]
+        for sections in TOPIC_CONFIG_SECTIONS_BY_TOPIC.values()
+        for section in sections
+    )
+
+
+def default_topic_config_values(section):
+    return tuple(value for value, _label in section["options"])
+
+
+def selected_topic_config_values(state, topic):
+    selections = {}
+    for section in topic_config_sections(topic):
+        key = section["key"]
+        valid_values = default_topic_config_values(section)
+        raw_value = state.get(key, valid_values)
+        if isinstance(raw_value, str):
+            raw_values = (raw_value,)
+        else:
+            raw_values = tuple(raw_value)
+
+        selected = tuple(value for value in valid_values if value in raw_values)
+        selections[key] = selected or valid_values
+    return selections
+
+
+def topic_uses_difficulty(topic):
+    return topic != "domain_and_range"
 
 
 def render_math_text(value):
@@ -497,8 +567,113 @@ def normalized_graph_point(point):
     return {"x": x_value, "y": y_value, "label": str(label)}
 
 
+def estimated_graph_label_width(label):
+    return max(GRAPH_POINT_LABEL_MIN_WIDTH, len(label) * GRAPH_POINT_LABEL_CHAR_WIDTH + 10)
+
+
+def graph_label_rect(label, x_pos, y_pos, anchor):
+    width = estimated_graph_label_width(label)
+    if anchor == "end":
+        left = x_pos - width
+    elif anchor == "middle":
+        left = x_pos - (width / 2)
+    else:
+        left = x_pos
+
+    return {
+        "left": left,
+        "right": left + width,
+        "top": y_pos - GRAPH_POINT_LABEL_HEIGHT + 4,
+        "bottom": y_pos + 4,
+        "width": width,
+    }
+
+
+def rect_overlap_area(rect, other):
+    width = min(rect["right"], other["right"]) - max(rect["left"], other["left"])
+    height = min(rect["bottom"], other["bottom"]) - max(rect["top"], other["top"])
+    if width <= 0 or height <= 0:
+        return 0
+    return width * height
+
+
+def rect_overlap_score(rect, placed_rects):
+    expanded = {
+        "left": rect["left"] - GRAPH_POINT_LABEL_MARGIN,
+        "right": rect["right"] + GRAPH_POINT_LABEL_MARGIN,
+        "top": rect["top"] - GRAPH_POINT_LABEL_MARGIN,
+        "bottom": rect["bottom"] + GRAPH_POINT_LABEL_MARGIN,
+    }
+    return sum(rect_overlap_area(expanded, placed) for placed in placed_rects)
+
+
+def rect_outside_score(rect, bounds):
+    return (
+        max(0, bounds["left"] - rect["left"])
+        + max(0, rect["right"] - bounds["right"])
+        + max(0, bounds["top"] - rect["top"])
+        + max(0, rect["bottom"] - bounds["bottom"])
+    )
+
+
+def nudge_label_inside_bounds(candidate, bounds):
+    x_pos = candidate["x"]
+    y_pos = candidate["y"]
+    rect = candidate["rect"]
+
+    if rect["left"] < bounds["left"]:
+        x_pos += bounds["left"] - rect["left"]
+    if rect["right"] > bounds["right"]:
+        x_pos -= rect["right"] - bounds["right"]
+    if rect["top"] < bounds["top"]:
+        y_pos += bounds["top"] - rect["top"]
+    if rect["bottom"] > bounds["bottom"]:
+        y_pos -= rect["bottom"] - bounds["bottom"]
+
+    rect = graph_label_rect(candidate["label"], x_pos, y_pos, candidate["anchor"])
+    return {**candidate, "x": x_pos, "y": y_pos, "rect": rect}
+
+
+def graph_point_label_candidates(label, x_pos, y_pos):
+    return (
+        {"x": x_pos + 10, "y": y_pos - 10, "anchor": "start", "leader": False},
+        {"x": x_pos - 10, "y": y_pos - 10, "anchor": "end", "leader": False},
+        {"x": x_pos + 10, "y": y_pos + 22, "anchor": "start", "leader": False},
+        {"x": x_pos - 10, "y": y_pos + 22, "anchor": "end", "leader": False},
+        {"x": x_pos + 16, "y": y_pos + 5, "anchor": "start", "leader": True},
+        {"x": x_pos - 16, "y": y_pos + 5, "anchor": "end", "leader": True},
+        {"x": x_pos, "y": y_pos - 16, "anchor": "middle", "leader": True},
+        {"x": x_pos, "y": y_pos + 26, "anchor": "middle", "leader": True},
+    )
+
+
+def choose_graph_point_label(label, x_pos, y_pos, placed_rects):
+    bounds = {
+        "left": plot_left() + 4,
+        "right": plot_right() - 4,
+        "top": plot_top() + 4,
+        "bottom": plot_bottom() - 4,
+    }
+    candidates = []
+
+    for candidate in graph_point_label_candidates(label, x_pos, y_pos):
+        rect = graph_label_rect(label, candidate["x"], candidate["y"], candidate["anchor"])
+        candidate = {**candidate, "label": label, "rect": rect}
+        candidate = nudge_label_inside_bounds(candidate, bounds)
+        candidates.append(
+            {
+                **candidate,
+                "overlap": rect_overlap_score(candidate["rect"], placed_rects),
+                "outside": rect_outside_score(candidate["rect"], bounds),
+            }
+        )
+
+    return min(candidates, key=lambda item: (item["outside"], item["overlap"], item["leader"]))
+
+
 def render_graph_points(points, x_min, x_max, y_min, y_max):
     rendered = []
+    placed_label_rects = []
     for point in points if isinstance(points, list) else []:
         normalized = normalized_graph_point(point)
         if not normalized:
@@ -511,9 +686,17 @@ def render_graph_points(points, x_min, x_max, y_min, y_max):
         y_pos = screen_y(y_value, y_min, y_max)
         rendered.append(f'<circle class="graph-point" cx="{x_pos:.2f}" cy="{y_pos:.2f}" r="4.5"></circle>')
         if normalized["label"]:
+            label = normalized["label"]
+            placement = choose_graph_point_label(label, x_pos, y_pos, placed_label_rects)
+            placed_label_rects.append(placement["rect"])
+            if placement["leader"]:
+                rendered.append(
+                    f'<line class="graph-label-leader" x1="{x_pos:.2f}" y1="{y_pos:.2f}" '
+                    f'x2="{placement["x"]:.2f}" y2="{placement["y"] - 5:.2f}"></line>'
+                )
             rendered.append(
-                f'<text class="graph-point-label" x="{x_pos + 8:.2f}" y="{y_pos - 8:.2f}">'
-                f'{render_math_text(normalized["label"])}</text>'
+                f'<text class="graph-point-label" x="{placement["x"]:.2f}" y="{placement["y"]:.2f}" '
+                f'style="text-anchor: {placement["anchor"]};">{render_math_text(label)}</text>'
             )
     return "\n".join(rendered)
 
@@ -658,6 +841,8 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
         view: state.get(f"question_view_{view}") == "true"
         for view in valid_question_view_values(topic)
     }
+    problem_config_selections = selected_topic_config_values(state, topic)
+    show_difficulty = topic_uses_difficulty(topic)
 
     if problem is None:
         problem = generators[topic](difficulty)
@@ -679,6 +864,8 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
         "generated": generated,
         "active_question_view": active_question_view,
         "question_view_selections": question_view_selections,
+        "problem_config_selections": problem_config_selections,
+        "show_difficulty": show_difficulty,
     }
 
 
@@ -693,6 +880,12 @@ def render_control_panel(context, units, difficulties):
     topic_dropdown = custom_dropdown("topic", "Topic", topic_options, topic)
     difficulty_dropdown = custom_dropdown("difficulty", "Difficulty", difficulty_options, difficulty)
     question_view_controls = render_question_view_controls(context)
+    problem_config_controls = render_problem_config_controls(context)
+    difficulty_control = (
+        difficulty_dropdown
+        if context["show_difficulty"]
+        else f'<input type="hidden" name="difficulty" value="{escape(difficulty)}">'
+    )
 
     return f"""      <form class="control-panel" action="/generate" method="get">
         <div class="panel-title">
@@ -704,9 +897,42 @@ def render_control_panel(context, units, difficulties):
         <input type="hidden" name="skip_count" value="{context["skip_count"]}">
         {unit_dropdown}
         {topic_dropdown}
-        {difficulty_dropdown}
+        {difficulty_control}
+        {problem_config_controls}
         {question_view_controls}
       </form>"""
+
+
+def render_problem_config_controls(context):
+    sections = topic_config_sections(context["topic"])
+    if not sections:
+        return ""
+
+    selections = context["problem_config_selections"]
+    rendered_sections = []
+    for section in sections:
+        key = section["key"]
+        controls = []
+        selected_values = selections.get(key, default_topic_config_values(section))
+        for value, label in section["options"]:
+            checked = " checked" if value in selected_values else ""
+            controls.append(
+                f"""<label class="config-checkbox-option">
+              <input type="checkbox" name="{escape(key)}" value="{escape(value)}" data-config-checkbox{checked}>
+              <span>{escape(label)}</span>
+            </label>"""
+            )
+
+        rendered_sections.append(
+            f"""<fieldset class="config-checkbox-group" data-config-checkbox-group>
+          <legend>{escape(section["label"])}</legend>
+          {''.join(controls)}
+        </fieldset>"""
+        )
+
+    return f"""        <div class="config-checkbox-stack">
+          {''.join(rendered_sections)}
+        </div>"""
 
 
 def render_question_view_controls(context):
@@ -739,6 +965,16 @@ def unit_option_attrs(units):
     return attrs
 
 
+def render_problem_config_hidden_inputs(context):
+    hidden_inputs = []
+    for key, values in context["problem_config_selections"].items():
+        for value in values:
+            hidden_inputs.append(
+                f'<input type="hidden" name="{escape(key)}" value="{escape(value)}">'
+            )
+    return "\n          ".join(hidden_inputs)
+
+
 def render_answer_form(context):
     unit = context["unit"]
     topic = context["topic"]
@@ -755,6 +991,7 @@ def render_answer_form(context):
     primary_action = "next" if correct_checked or solution_visible else "check"
     primary_label = "Next Problem" if primary_action == "next" else "Check"
     answer_controls = render_answer_controls(problem)
+    problem_config_inputs = render_problem_config_hidden_inputs(context)
 
     return f"""        <form class="answer-panel" action="/check" method="post">
           <input type="hidden" name="unit" value="{escape(unit)}">
@@ -772,6 +1009,7 @@ def render_answer_form(context):
           <input type="hidden" name="question_view_equation" value="{str(context["question_view_selections"].get("equation", False)).lower()}">
           <input type="hidden" name="question_view_graph" value="{str(context["question_view_selections"].get("graph", False)).lower()}">
           <input type="hidden" name="active_question_view" value="{escape(context["active_question_view"])}">
+          {problem_config_inputs}
           <div class="answer-row">
             {answer_controls}
           </div>
@@ -864,13 +1102,18 @@ def render_problem_panel(context, unit_label, topic_label):
         if active_question_view == "graph" and problem.graph_config.get("enabled")
         else ""
     )
+    difficulty_badge = (
+        f'<span data-badge="difficulty">{escape(difficulty.title())}</span>'
+        if context["show_difficulty"]
+        else ""
+    )
 
     return f"""      <section class="problem-panel" aria-live="polite">
         <div class="badges">
           <span>Algebra 2</span>
           <span data-badge="unit">{escape(unit_label(unit))}</span>
           <span data-badge="topic">{escape(topic_label(topic))}</span>
-          <span data-badge="difficulty">{escape(difficulty.title())}</span>
+          {difficulty_badge}
         </div>
 
         <h1>{render_problem_display(problem, active_question_view)}</h1>

@@ -201,13 +201,70 @@ document.querySelectorAll("[data-question-view-group]").forEach((group) => {
     const checkboxes = Array.from(group.querySelectorAll("[data-question-view]"));
     if (!checkboxes.some((checkbox) => checkbox.checked)) {
       event.target.checked = true;
+    }
+  });
+});
+
+document.querySelectorAll("[data-config-checkbox-group]").forEach((group) => {
+  group.addEventListener("change", (event) => {
+    if (!event.target.matches("[data-config-checkbox]")) {
       return;
     }
 
-    const form = group.closest("form");
-    if (form) {
-      form.submit();
+    const checkboxes = Array.from(group.querySelectorAll("[data-config-checkbox]"));
+    if (!checkboxes.some((checkbox) => checkbox.checked)) {
+      event.target.checked = true;
     }
+  });
+});
+
+function replaceHiddenFieldValues(form, fieldName, values) {
+  Array.from(form.elements).forEach((element) => {
+    if (element.type === "hidden" && element.name === fieldName) {
+      element.remove();
+    }
+  });
+
+  values.forEach((value) => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = fieldName;
+    input.value = value;
+    form.appendChild(input);
+  });
+}
+
+function syncConfigCheckboxesToForm(form) {
+  document.querySelectorAll("[data-config-checkbox-group]").forEach((group) => {
+    const checkboxes = Array.from(group.querySelectorAll("[data-config-checkbox]"));
+    if (!checkboxes.length) {
+      return;
+    }
+
+    const fieldName = checkboxes[0].name;
+    const values = checkboxes
+      .filter((checkbox) => checkbox.checked)
+      .map((checkbox) => checkbox.value);
+    replaceHiddenFieldValues(form, fieldName, values);
+  });
+}
+
+document.querySelectorAll(".answer-panel").forEach((form) => {
+  form.addEventListener("submit", (event) => {
+    const action = event.submitter?.value;
+    if (action !== "skip" && action !== "next") {
+      return;
+    }
+
+    document.querySelectorAll("[data-question-view]").forEach((checkbox) => {
+      form
+        .querySelectorAll(`input[type="hidden"][name="${checkbox.name}"]`)
+        .forEach((input) => {
+          input.value = checkbox.checked ? "true" : "";
+        });
+    });
+
+    syncConfigCheckboxesToForm(form);
   });
 });
 
