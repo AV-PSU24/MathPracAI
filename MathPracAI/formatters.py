@@ -1,7 +1,3 @@
-def signed(value):
-    return f"- {abs(value)}" if value < 0 else f"+ {value}"
-
-
 def signed_spaced(value):
     return f" - {abs(value)}" if value < 0 else f" + {value}"
 

@@ -16,8 +16,13 @@ Then open:
 http://localhost:8010
 ```
 
-## Notes
+## Architecture Notes
 
-- All problem generation and answer checking lives in `app.py`.
-- `script.js` only handles the custom dropdown UI.
-- The page is focused on Algebra 2 Unit 1: Functions and Graphs.
+- `app.py` handles HTTP routing and request flow.
+- `generators.py` handles problem generation.
+- `models.py` handles the `Problem` object and serialization.
+- `validators.py` handles answer validation.
+- `renderers.py` handles HTML rendering.
+- `formatters.py` handles math text formatting.
+- `script.js` handles browser-side interactions.
+- `styles.css` handles styling.

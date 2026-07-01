@@ -36,6 +36,6 @@ def field_answers_match_problem(user_answers, problem):
         correct_answer = field.get("correct_answer")
         if correct_answer is None:
             correct_answer = problem.correct_answer
-        if normalize(user_answers.get(field_name, "")) != normalize(correct_answer):
+        if not answers_match(user_answers.get(field_name, ""), correct_answer):
             return False
     return True
