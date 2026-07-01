@@ -43,7 +43,15 @@ def graph_bound(value, fallback):
     return int(number) if number.is_integer() else number
 
 
-def function_graph_config(equation, x_min=-10, x_max=10, y_min=-10, y_max=10, points=None, features=None):
+def function_graph_config(
+    equation,
+    x_min=-10,
+    x_max=10,
+    y_min=-10,
+    y_max=10,
+    points=None,
+    features=None,
+):
     config = no_graph_config()
     config.update(
         {

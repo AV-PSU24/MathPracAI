@@ -244,6 +244,45 @@ button {
   font-weight: 950;
 }
 
+.question-view-group {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.question-view-group legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.question-view-option {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 850;
+  text-transform: none;
+}
+
+.question-view-option input {
+  width: 18px;
+  min-height: 18px;
+  accent-color: var(--accent);
+}
+
 button:hover {
   background: var(--accent-dark);
 }
@@ -297,6 +336,101 @@ h1 {
   line-height: 1.25;
   text-align: center;
   overflow-wrap: anywhere;
+}
+
+.graph-card {
+  display: grid;
+  gap: 10px;
+  width: min(100%, 720px);
+  margin: -6px auto 0;
+}
+
+.graph-card figcaption {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 900;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.math-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 8 / 5;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.03);
+}
+
+.graph-plot-bg {
+  fill: #fbfdff;
+}
+
+.graph-grid-line {
+  stroke: #e2e8f0;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-minor-grid-line {
+  stroke: #f1f5f9;
+  stroke-width: 0.75;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-major-grid-line {
+  stroke: #dbe4ee;
+}
+
+.graph-axis {
+  stroke: #64748b;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-tick-mark {
+  stroke: #64748b;
+  stroke-width: 1.1;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-minor-tick-mark {
+  stroke: #94a3b8;
+  stroke-width: 0.8;
+}
+
+.graph-curve {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-point {
+  fill: #ffffff;
+  stroke: var(--accent);
+  stroke-width: 2.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-tick-label,
+.graph-point-label {
+  fill: var(--muted);
+  font-size: 13px;
+  font-weight: 850;
+  user-select: none;
+}
+
+.graph-x-label {
+  text-anchor: middle;
+}
+
+.graph-y-label {
+  text-anchor: end;
 }
 
 .answer-panel {
@@ -490,6 +624,19 @@ h1 {
   .control-panel,
   .problem-panel {
     padding: 16px;
+  }
+
+  .graph-card {
+    width: 100%;
+  }
+
+  .graph-card figcaption {
+    font-size: 0.76rem;
+  }
+
+  .graph-tick-label,
+  .graph-point-label {
+    font-size: 11px;
   }
 
   .answer-row {

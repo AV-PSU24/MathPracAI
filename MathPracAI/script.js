@@ -192,6 +192,25 @@ document.addEventListener("click", (event) => {
   });
 });
 
+document.querySelectorAll("[data-question-view-group]").forEach((group) => {
+  group.addEventListener("change", (event) => {
+    if (!event.target.matches("[data-question-view]")) {
+      return;
+    }
+
+    const checkboxes = Array.from(group.querySelectorAll("[data-question-view]"));
+    if (!checkboxes.some((checkbox) => checkbox.checked)) {
+      event.target.checked = true;
+      return;
+    }
+
+    const form = group.closest("form");
+    if (form) {
+      form.submit();
+    }
+  });
+});
+
 let currentAnswerInput = null;
 
 document.addEventListener("focusin", (event) => {

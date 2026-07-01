@@ -1,16 +1,17 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-import os
+import errno
 from pathlib import Path
+from random import choice
 from urllib.parse import parse_qs, urlparse
 
 from generators import GENERATORS
 from models import problem_from_form
-from renderers import render_page
+from renderers import default_question_view_values, render_page, valid_question_view_values
 from validators import answers_match_problem
 
 
 ROOT = Path(__file__).parent
-PORT = int(os.environ.get("PORT", "8010"))
+PORT = 8010
 
 UNITS = {
     "unit1": {
@@ -49,6 +50,32 @@ def count_value(state, key):
         return 0
 
 
+def question_view_field(view):
+    return f"question_view_{view}"
+
+
+def selected_question_views(state, topic):
+    valid_views = valid_question_view_values(topic)
+    has_view_fields = any(question_view_field(view) in state for view in valid_views)
+    if not has_view_fields:
+        return default_question_view_values(topic)
+
+    selected = tuple(view for view in valid_views if state.get(question_view_field(view)) == "true")
+    return selected or valid_views[:1]
+
+
+def apply_question_view_state(state, choose_new_active=False):
+    topic = state["topic"] if state.get("topic") in GENERATORS else "evaluating_functions"
+    selected = selected_question_views(state, topic)
+    for view in ("equation", "graph", "table"):
+        state[question_view_field(view)] = "true" if view in selected else ""
+
+    active_view = state.get("active_question_view")
+    if choose_new_active or active_view not in selected:
+        active_view = choice(selected)
+    state["active_question_view"] = active_view
+
+
 def reset_for_new_problem(state):
     unit = state["unit"] if state["unit"] in UNITS else "unit1"
     topic = state["topic"] if valid_topic_for_unit(unit, state["topic"]) else UNITS[unit]["topics"][0][0]
@@ -65,9 +92,11 @@ def reset_for_new_problem(state):
     state["answered"] = ""
     state["feedback"] = ""
     state["feedback_type"] = "empty"
+    apply_question_view_state(state, choose_new_active=True)
 
 
 def render_app_page(state):
+    apply_question_view_state(state)
     return render_page(
         state,
         UNITS,
@@ -133,6 +162,7 @@ class MathPracHandler(BaseHTTPRequestHandler):
                 query["solution_visible"] = ""
                 query["answered"] = ""
                 query["generated"] = "true"
+                apply_question_view_state(query, choose_new_active=True)
             self.respond(render_app_page(query))
             return
 
@@ -161,6 +191,9 @@ class MathPracHandler(BaseHTTPRequestHandler):
             "incorrect_count": data.get("incorrect_count", "0"),
             "skip_count": data.get("skip_count", "0"),
             "generated": data.get("generated", "true"),
+            "question_view_equation": data.get("question_view_equation", ""),
+            "question_view_graph": data.get("question_view_graph", ""),
+            "active_question_view": data.get("active_question_view", ""),
         }
 
         if action == "hint":
@@ -204,6 +237,16 @@ class MathPracHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("localhost", PORT), MathPracHandler)
-    print(f"MathPracAI running at http://localhost:{PORT}")
+    try:
+        server = ThreadingHTTPServer(("localhost", PORT), MathPracHandler)
+    except OSError as error:
+        if error.errno == errno.EADDRINUSE:
+            print(
+                "Error: another server is already running on port 8010. Stop it or kill the process, then run python3 app.py again.",
+                flush=True,
+            )
+            raise SystemExit(1)
+        raise
+
+    print("Local server running at http://localhost:8010/", flush=True)
     server.serve_forever()
