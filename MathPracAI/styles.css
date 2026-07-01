@@ -244,22 +244,39 @@ button {
   font-weight: 950;
 }
 
-.question-view-group {
+.question-view-group,
+.config-checkbox-stack,
+.config-checkbox-group {
   display: grid;
   gap: 10px;
   min-width: 0;
+}
+
+.question-view-group,
+.config-checkbox-group {
   margin: 0;
   border: 0;
   padding: 0;
 }
 
-.question-view-group legend {
+.config-checkbox-stack {
+  gap: 10px;
+}
+
+.question-view-group legend,
+.config-checkbox-group legend {
   margin-bottom: 8px;
   padding: 0;
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 850;
   text-transform: uppercase;
+}
+
+.config-checkbox-group legend {
+  margin-bottom: 5px;
+  font-size: 0.68rem;
+  font-weight: 850;
 }
 
 .question-view-option {
@@ -277,9 +294,30 @@ button {
   text-transform: none;
 }
 
+.config-checkbox-option {
+  display: flex;
+  min-height: 32px;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 9px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: none;
+}
+
 .question-view-option input {
   width: 18px;
   min-height: 18px;
+  accent-color: var(--accent);
+}
+
+.config-checkbox-option input {
+  width: 14px;
+  min-height: 14px;
   accent-color: var(--accent);
 }
 
@@ -414,6 +452,14 @@ h1 {
   fill: #ffffff;
   stroke: var(--accent);
   stroke-width: 2.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.graph-label-leader {
+  stroke: #94a3b8;
+  stroke-dasharray: 3 3;
+  stroke-linecap: round;
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
