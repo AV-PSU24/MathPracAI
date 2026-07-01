@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from math import ceil, floor, isfinite, log10
 from random import randint
 
 from formatters import (
@@ -10,6 +11,11 @@ from formatters import (
     format_square_root_equation,
 )
 from models import Problem, function_graph_config, no_graph_config
+
+
+GRAPH_PADDING_RATIO = 0.12
+GRAPH_MIN_SPAN = 4
+GRAPH_SAMPLE_COUNT = 120
 
 
 @dataclass(frozen=True)
@@ -111,6 +117,316 @@ def evaluate_polynomial(coefficients, x):
         exponent = degree - index
         value += coefficient * (x**exponent)
     return value
+
+
+def clean_number(value):
+    if isinstance(value, bool):
+        return value
+    number = float(value)
+    if abs(number) < 1e-10:
+        number = 0
+    rounded = round(number)
+    if abs(number - rounded) < 1e-10:
+        return int(rounded)
+    return round(number, 6)
+
+
+def point(x, y, label=None):
+    graph_point = {"x": clean_number(x), "y": clean_number(y)}
+    if label:
+        graph_point["label"] = label
+    return graph_point
+
+
+def unique_points(points):
+    seen = set()
+    unique = []
+    for graph_point in points:
+        key = (graph_point.get("x"), graph_point.get("y"), graph_point.get("label", ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(graph_point)
+    return unique
+
+
+def labeled_feature_point(feature_point, label):
+    if not isinstance(feature_point, dict):
+        return None
+    return point(feature_point["x"], feature_point["y"], label)
+
+
+def graph_points_from_features(features):
+    points = []
+    for label in ("vertex", "endpoint", "y_intercept"):
+        graph_point = labeled_feature_point(features.get(label), label)
+        if graph_point:
+            points.append(graph_point)
+    for graph_point in features.get("x_intercepts", []):
+        labeled = labeled_feature_point(graph_point, "x_intercept")
+        if labeled:
+            points.append(labeled)
+    return unique_points(points)
+
+
+def nice_step(raw_step):
+    if raw_step <= 0 or not isfinite(raw_step):
+        return 1
+    magnitude = 10 ** floor(log10(raw_step))
+    fraction = raw_step / magnitude
+    if fraction <= 1:
+        nice_fraction = 1
+    elif fraction <= 2:
+        nice_fraction = 2
+    elif fraction <= 5:
+        nice_fraction = 5
+    else:
+        nice_fraction = 10
+    return nice_fraction * magnitude
+
+
+def padded_graph_bounds(values, min_span=GRAPH_MIN_SPAN):
+    finite_values = [value for value in values if isinstance(value, (int, float)) and isfinite(value)]
+    if not finite_values:
+        return -10, 10
+
+    low = min(finite_values)
+    high = max(finite_values)
+    if low == high:
+        low -= min_span / 2
+        high += min_span / 2
+
+    span = high - low
+    padding = max(span * GRAPH_PADDING_RATIO, 0.5)
+    low -= padding
+    high += padding
+
+    if high - low < min_span:
+        center = (low + high) / 2
+        low = center - min_span / 2
+        high = center + min_span / 2
+
+    step = nice_step((high - low) / 8)
+    return clean_number(floor(low / step) * step), clean_number(ceil(high / step) * step)
+
+
+def sample_x_values(x_min, x_max, count=GRAPH_SAMPLE_COUNT):
+    if count <= 1:
+        return [x_min]
+    step = (x_max - x_min) / (count - 1)
+    return [x_min + step * index for index in range(count)]
+
+
+def polynomial_x_bounds(coefficients):
+    degree = len(coefficients) - 1
+    if degree == 1:
+        return -6, 6
+    if degree == 2 and coefficients[0] != 0:
+        vertex_x = -coefficients[1] / (2 * coefficients[0])
+        return padded_graph_bounds([vertex_x - 5, vertex_x + 5])
+    if degree == 2:
+        return -6, 6
+    return -3, 3
+
+
+def polynomial_graph_bounds(coefficients):
+    x_min, x_max = polynomial_x_bounds(coefficients)
+    y_values = [evaluate_polynomial(coefficients, x) for x in sample_x_values(x_min, x_max)]
+    y_min, y_max = padded_graph_bounds(y_values)
+    return {
+        "x_min": x_min,
+        "x_max": x_max,
+        "y_min": y_min,
+        "y_max": y_max,
+    }
+
+
+def polynomial_graph_features(coefficients):
+    degree = len(coefficients) - 1
+    features = {
+        "degree": degree,
+        "domain": interval_all_real(),
+        "x_intercepts": [],
+        "y_intercept": point(0, coefficients[-1]),
+    }
+
+    if degree == 1:
+        m, b = coefficients
+        features.update(linear_features({"family": "linear", "m": m, "b": b}))
+    elif degree == 2:
+        a, b, c = coefficients
+        vertex_x = -b / (2 * a)
+        vertex_y = evaluate_polynomial(coefficients, vertex_x)
+        features.update(
+            {
+                "vertex": point(vertex_x, vertex_y),
+                "axis_of_symmetry": {"x": clean_number(vertex_x)},
+                "opens": "up" if a > 0 else "down",
+                "x_intercepts": quadratic_standard_x_intercepts(a, b, c),
+                "range": interval_from(clean_number(vertex_y)) if a > 0 else interval_to(clean_number(vertex_y)),
+            }
+        )
+    return features
+
+
+def evaluate_function_data(function_data, x):
+    family = function_data["family"]
+    if family == "linear":
+        return function_data["m"] * x + function_data["b"]
+
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    shifted = x - h
+
+    if family == "quadratic":
+        return a * (shifted**2) + k
+    if family == "absolute_value":
+        return a * abs(shifted) + k
+    if family == "square_root":
+        if shifted < 0:
+            return None
+        return a * (shifted**0.5) + k
+    return None
+
+
+def function_data_x_bounds(function_data):
+    family = function_data["family"]
+    if family == "linear":
+        return -6, 6
+    if family in ("quadratic", "absolute_value"):
+        h = function_data["h"]
+        return padded_graph_bounds([h - 5, h + 5])
+    if family == "square_root":
+        h = function_data["h"]
+        return h, h + 9
+    return -10, 10
+
+
+def function_data_graph_bounds(function_data):
+    x_min, x_max = function_data_x_bounds(function_data)
+    y_values = [
+        y
+        for y in (evaluate_function_data(function_data, x) for x in sample_x_values(x_min, x_max))
+        if y is not None
+    ]
+    y_min, y_max = padded_graph_bounds(y_values)
+    return {
+        "x_min": x_min,
+        "x_max": x_max,
+        "y_min": y_min,
+        "y_max": y_max,
+    }
+
+
+def real_square_root(value):
+    if value < 0:
+        return None
+    return value**0.5
+
+
+def linear_features(function_data):
+    m = function_data["m"]
+    b = function_data["b"]
+    x_intercepts = []
+    if m != 0:
+        x_intercepts.append(point(-b / m, 0))
+
+    return {
+        "y_intercept": point(0, b),
+        "x_intercepts": x_intercepts,
+        "slope": clean_number(m),
+        "domain": interval_all_real(),
+        "range": interval_all_real(),
+    }
+
+
+def quadratic_standard_x_intercepts(a, b, c):
+    discriminant = b**2 - 4 * a * c
+    root = real_square_root(discriminant)
+    if root is None:
+        return []
+    denominator = 2 * a
+    return unique_points([point((-b - root) / denominator, 0), point((-b + root) / denominator, 0)])
+
+
+def quadratic_features(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    root_distance = real_square_root(-k / a)
+    x_intercepts = []
+    if root_distance is not None:
+        x_intercepts = unique_points([point(h - root_distance, 0), point(h + root_distance, 0)])
+
+    return {
+        "vertex": point(h, k),
+        "axis_of_symmetry": {"x": clean_number(h)},
+        "opens": "up" if a > 0 else "down",
+        "x_intercepts": x_intercepts,
+        "y_intercept": point(0, evaluate_function_data(function_data, 0)),
+        "domain": interval_all_real(),
+        "range": range_for(function_data),
+    }
+
+
+def absolute_value_features(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    root_distance = -k / a
+    x_intercepts = []
+    if root_distance >= 0:
+        x_intercepts = unique_points([point(h - root_distance, 0), point(h + root_distance, 0)])
+
+    return {
+        "vertex": point(h, k),
+        "axis_of_symmetry": {"x": clean_number(h)},
+        "opens": "up" if a > 0 else "down",
+        "x_intercepts": x_intercepts,
+        "y_intercept": point(0, evaluate_function_data(function_data, 0)),
+        "domain": interval_all_real(),
+        "range": range_for(function_data),
+    }
+
+
+def square_root_features(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    endpoint = point(h, k)
+    root_value = -k / a
+    x_intercepts = []
+    if root_value >= 0:
+        x_intercepts = [point(h + root_value**2, 0)]
+
+    y_intercept = None
+    if h <= 0:
+        y_intercept = point(0, evaluate_function_data(function_data, 0))
+
+    return {
+        "endpoint": endpoint,
+        "endpoints": [endpoint],
+        "starts_at": endpoint,
+        "direction": "right",
+        "x_intercepts": x_intercepts,
+        "y_intercept": y_intercept,
+        "domain": domain_for(function_data),
+        "range": range_for(function_data),
+    }
+
+
+def features_for_function(function_data):
+    family = function_data["family"]
+    if family == "linear":
+        return linear_features(function_data)
+    if family == "quadratic":
+        return quadratic_features(function_data)
+    if family == "absolute_value":
+        return absolute_value_features(function_data)
+    if family == "square_root":
+        return square_root_features(function_data)
+    return {}
 
 
 def nonzero_random(start, stop):
@@ -264,6 +580,8 @@ def render_evaluating_functions_problem(data, difficulty):
     equation = format_function_equation(coefficients)
     prompt = f"Evaluate f({input_value})."
     substitution = format_function_substitution(coefficients, input_value)
+    graph_bounds = polynomial_graph_bounds(coefficients)
+    graph_features = polynomial_graph_features(coefficients)
 
     return create_problem(
         topic=EVALUATING_FUNCTIONS_PROBLEM_TYPE.topic,
@@ -277,7 +595,12 @@ def render_evaluating_functions_problem(data, difficulty):
         hint="Substitute the input value anywhere x appears.",
         solution=f"f({input_value}) = {substitution} = {correct_answer}.",
         metadata=data,
-        graph_config=function_graph_config(raw_polynomial_expression(coefficients)),
+        graph_config=function_graph_config(
+            raw_polynomial_expression(coefficients),
+            **graph_bounds,
+            points=graph_points_from_features(graph_features),
+            features=graph_features,
+        ),
     )
 
 
@@ -317,6 +640,8 @@ def render_domain_range_problem(data, difficulty):
     equation = equation_for(function_data)
     answer_fields = domain_range_answer_fields(data)
     answer_summary = "; ".join(f'{field["label"]}: {field["correct_answer"]}' for field in answer_fields)
+    graph_bounds = function_data_graph_bounds(function_data)
+    graph_features = features_for_function(function_data)
 
     return create_problem(
         topic=DOMAIN_RANGE_PROBLEM_TYPE.topic,
@@ -330,7 +655,12 @@ def render_domain_range_problem(data, difficulty):
         hint=domain_range_hint(function_data),
         solution=domain_range_solution(function_data, data["domain"], data["range"]),
         metadata=data,
-        graph_config=function_graph_config(raw_function_expression(function_data)),
+        graph_config=function_graph_config(
+            raw_function_expression(function_data),
+            **graph_bounds,
+            points=graph_points_from_features(graph_features),
+            features=graph_features,
+        ),
     )
 
 

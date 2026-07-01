@@ -2,11 +2,7 @@ def signed(value):
     return f"- {abs(value)}" if value < 0 else f"+ {value}"
 
 
-def signed_compact(value):
-    return f" - {abs(value)}" if value < 0 else f" + {value}"
-
-
-def signed_group_shift(value):
+def signed_spaced(value):
     return f" - {abs(value)}" if value < 0 else f" + {value}"
 
 
@@ -74,7 +70,7 @@ def format_linear_equation(function_data):
         slope = "-x"
     else:
         slope = f"{m}x"
-    return f"f(x) = {slope}{signed_compact(b)}" if b else f"f(x) = {slope}"
+    return f"f(x) = {slope}{signed_spaced(b)}" if b else f"f(x) = {slope}"
 
 
 def format_quadratic_vertex_equation(function_data):
@@ -82,7 +78,7 @@ def format_quadratic_vertex_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}(x{signed_group_shift(-h)})²{signed_compact(k)}" if k else f"f(x) = {coefficient}(x{signed_group_shift(-h)})²"
+    return f"f(x) = {coefficient}(x{signed_spaced(-h)})²{signed_spaced(k)}" if k else f"f(x) = {coefficient}(x{signed_spaced(-h)})²"
 
 
 def format_absolute_value_equation(function_data):
@@ -90,7 +86,7 @@ def format_absolute_value_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}|x{signed_group_shift(-h)}|{signed_compact(k)}" if k else f"f(x) = {coefficient}|x{signed_group_shift(-h)}|"
+    return f"f(x) = {coefficient}|x{signed_spaced(-h)}|{signed_spaced(k)}" if k else f"f(x) = {coefficient}|x{signed_spaced(-h)}|"
 
 
 def format_square_root_equation(function_data):
@@ -98,4 +94,4 @@ def format_square_root_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}sqrt(x{signed_group_shift(-h)}){signed_compact(k)}" if k else f"f(x) = {coefficient}sqrt(x{signed_group_shift(-h)})"
+    return f"f(x) = {coefficient}sqrt(x{signed_spaced(-h)}){signed_spaced(k)}" if k else f"f(x) = {coefficient}sqrt(x{signed_spaced(-h)})"
