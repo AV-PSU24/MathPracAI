@@ -4,6 +4,7 @@ from random import randint
 
 from formatters import (
     format_absolute_value_equation,
+    format_cubic_transformed_equation,
     format_function_equation,
     format_function_substitution,
     format_linear_equation,
@@ -38,9 +39,23 @@ class EvaluatingFunctionsProblemType:
             return "quadratic"
         return "polynomial"
 
-    def generate(self, difficulty):
-        degree = self.degree_for(difficulty)
-        family = self.family_for_degree(degree)
+    def degree_for_family(self, family, difficulty):
+        if family == "linear":
+            return 1
+        if family == "quadratic":
+            return 2
+        if difficulty == "medium":
+            return randint(3, 4)
+        if difficulty == "hard":
+            return randint(3, 5)
+        return 3
+
+    def generate(self, difficulty, options=None):
+        options = options if isinstance(options, dict) else {}
+        config = options.get("topic_config") if isinstance(options.get("topic_config"), dict) else options
+        families = selected_values(config, "functionFamilies", self.supported_families)
+        family = random_from(families)
+        degree = self.degree_for_family(family, difficulty)
         coefficient_limit = 4 if difficulty == "easy" else 7
         input_value = randint(-4 if difficulty != "easy" else 1, 6 if difficulty == "easy" else 8)
         coefficients = [randint(1, coefficient_limit)]
@@ -63,21 +78,71 @@ class DomainRangeProblemType:
     topic: str = "domain_and_range"
     problem_type: str = "domain_range_equation"
     question_targets: tuple[str, ...] = ("domain", "range")
-    function_families: tuple[str, ...] = ("linear", "quadratic", "absolute_value", "square_root")
-    presentations: tuple[str, ...] = ("equation",)
+    function_families: tuple[str, ...] = ("linear", "quadratic", "absolute_value", "square_root", "cubic")
+    function_styles: tuple[str, ...] = ("simple", "transformations")
+    domain_restrictions: tuple[str, ...] = ("none", "restricted_interval", "union_of_intervals")
+    presentations: tuple[str, ...] = ("equation", "graph")
 
-    def generate(self, difficulty):
-        family = self.function_families[randint(0, len(self.function_families) - 1)]
-        function_data = self.generate_function_data(family, difficulty)
+    def generate(self, difficulty, options=None):
+        constraints = self.normalized_constraints(options)
+        for _attempt in range(100):
+            family = random_from(constraints["functionFamilies"])
+            style = random_from(constraints["functionStyles"])
+            domain_restriction = random_from(constraints["domainRestrictions"])
+            presentation = random_from(constraints["questionViews"])
+            function_data = self.generate_function_data(family, difficulty, style)
+            domain_segments = restricted_domain_segments(function_data, domain_restriction)
+            data = {
+                "presentation": presentation,
+                "question_targets": list(self.question_targets),
+                "function_style": style,
+                "domain_restriction": domain_restriction,
+                "domain_segments": domain_segments or [],
+                "function": function_data,
+                "domain": domain_for(function_data, domain_segments),
+                "range": range_for(function_data, domain_segments),
+            }
+            if self.matches_constraints(data, constraints):
+                return data
+
+        family = constraints["functionFamilies"][0]
+        style = constraints["functionStyles"][0]
+        domain_restriction = constraints["domainRestrictions"][0]
+        function_data = self.generate_function_data(family, difficulty, style)
+        domain_segments = restricted_domain_segments(function_data, domain_restriction)
         return {
-            "presentation": "equation",
+            "presentation": constraints["questionViews"][0],
             "question_targets": list(self.question_targets),
+            "function_style": style,
+            "domain_restriction": domain_restriction,
+            "domain_segments": domain_segments or [],
             "function": function_data,
-            "domain": domain_for(function_data),
-            "range": range_for(function_data),
+            "domain": domain_for(function_data, domain_segments),
+            "range": range_for(function_data, domain_segments),
         }
 
-    def generate_function_data(self, family, difficulty):
+    def normalized_constraints(self, options):
+        options = options if isinstance(options, dict) else {}
+        config = options.get("topic_config") if isinstance(options.get("topic_config"), dict) else options
+        return {
+            "functionFamilies": selected_values(config, "functionFamilies", self.function_families),
+            "functionStyles": selected_values(config, "functionStyles", self.function_styles),
+            "domainRestrictions": selected_values(config, "domainRestrictions", self.domain_restrictions),
+            "questionViews": selected_values(options, "questionViews", self.presentations),
+        }
+
+    def matches_constraints(self, data, constraints):
+        return (
+            data["function"]["family"] in constraints["functionFamilies"]
+            and data["function_style"] in constraints["functionStyles"]
+            and data["domain_restriction"] in constraints["domainRestrictions"]
+            and data["presentation"] in constraints["questionViews"]
+        )
+
+    def generate_function_data(self, family, difficulty, style):
+        if style == "simple":
+            return simple_function_data(family)
+
         if family == "linear":
             return {
                 "family": "linear",
@@ -99,6 +164,13 @@ class DomainRangeProblemType:
                 "h": randint(-6, 6),
                 "k": randint(-8, 8),
             }
+        if family == "cubic":
+            return {
+                "family": "cubic",
+                "a": nonzero_choice((-2, -1, 1, 2)),
+                "h": randint(-5, 5),
+                "k": randint(-8, 8),
+            }
         return {
             "family": "square_root",
             "a": nonzero_choice((-2, -1, 1, 2)),
@@ -108,6 +180,58 @@ class DomainRangeProblemType:
 
 
 DOMAIN_RANGE_PROBLEM_TYPE = DomainRangeProblemType()
+
+
+def random_from(values):
+    return values[randint(0, len(values) - 1)]
+
+
+def selected_values(options, key, valid_values):
+    raw_values = options.get(key) if isinstance(options, dict) else None
+    if isinstance(raw_values, str):
+        raw_values = (raw_values,)
+    elif raw_values:
+        raw_values = tuple(raw_values)
+    else:
+        raw_values = ()
+
+    selected = tuple(value for value in valid_values if value in raw_values)
+    return selected or valid_values[:1]
+
+
+def simple_function_data(family):
+    if family == "linear":
+        return {"family": "linear", "m": 1, "b": 0}
+    if family == "quadratic":
+        return {"family": "quadratic", "form": "vertex", "a": 1, "h": 0, "k": 0}
+    if family == "absolute_value":
+        return {"family": "absolute_value", "a": 1, "h": 0, "k": 0}
+    if family == "square_root":
+        return {"family": "square_root", "a": 1, "h": 0, "k": 0}
+    return {"family": "cubic", "a": 1, "h": 0, "k": 0}
+
+
+def closed_segment(low, high):
+    return {"low": clean_number(low), "high": clean_number(high), "low_closed": True, "high_closed": True}
+
+
+def minimum_domain_low(function_data):
+    return function_data["h"] if function_data["family"] == "square_root" else -6
+
+
+def restricted_domain_segments(function_data, domain_restriction):
+    if domain_restriction == "none":
+        return None
+
+    start_floor = minimum_domain_low(function_data)
+    start = randint(start_floor, start_floor + 3)
+    first_end = start + randint(3, 6)
+    if domain_restriction == "restricted_interval":
+        return [closed_segment(start, first_end)]
+
+    second_start = first_end + randint(2, 4)
+    second_end = second_start + randint(2, 5)
+    return [closed_segment(start, first_end), closed_segment(second_start, second_end)]
 
 
 def evaluate_polynomial(coefficients, x):
@@ -287,10 +411,21 @@ def evaluate_function_data(function_data, x):
         if shifted < 0:
             return None
         return a * (shifted**0.5) + k
+    if family == "cubic":
+        return a * (shifted**3) + k
     return None
 
 
-def function_data_x_bounds(function_data):
+def function_data_x_bounds(function_data, domain_segments=None):
+    if domain_segments:
+        return padded_graph_bounds(
+            [
+                value
+                for segment in domain_segments
+                for value in (segment.get("low"), segment.get("high"))
+            ]
+        )
+
     family = function_data["family"]
     if family == "linear":
         return -6, 6
@@ -300,16 +435,23 @@ def function_data_x_bounds(function_data):
     if family == "square_root":
         h = function_data["h"]
         return h, h + 9
+    if family == "cubic":
+        h = function_data["h"]
+        return padded_graph_bounds([h - 4, h + 4])
     return -10, 10
 
 
-def function_data_graph_bounds(function_data):
-    x_min, x_max = function_data_x_bounds(function_data)
-    y_values = [
-        y
-        for y in (evaluate_function_data(function_data, x) for x in sample_x_values(x_min, x_max))
-        if y is not None
-    ]
+def function_data_graph_bounds(function_data, domain_segments=None):
+    x_min, x_max = function_data_x_bounds(function_data, domain_segments)
+    if domain_segments:
+        sample_values = [
+            x
+            for segment in domain_segments
+            for x in sample_x_values(segment["low"], segment["high"])
+        ]
+    else:
+        sample_values = sample_x_values(x_min, x_max)
+    y_values = [y for y in (evaluate_function_data(function_data, x) for x in sample_values) if y is not None]
     y_min, y_max = padded_graph_bounds(y_values)
     return {
         "x_min": x_min,
@@ -323,6 +465,10 @@ def real_square_root(value):
     if value < 0:
         return None
     return value**0.5
+
+
+def real_cuberoot(value):
+    return value ** (1 / 3) if value >= 0 else -((-value) ** (1 / 3))
 
 
 def linear_features(function_data):
@@ -416,6 +562,18 @@ def square_root_features(function_data):
     }
 
 
+def cubic_features(function_data):
+    h = function_data["h"]
+    k = function_data["k"]
+    return {
+        "inflection": point(h, k),
+        "y_intercept": point(0, evaluate_function_data(function_data, 0)),
+        "x_intercepts": [point(h + real_cuberoot(-k / function_data["a"]), 0)],
+        "domain": interval_all_real(),
+        "range": interval_all_real(),
+    }
+
+
 def features_for_function(function_data):
     family = function_data["family"]
     if family == "linear":
@@ -426,6 +584,8 @@ def features_for_function(function_data):
         return absolute_value_features(function_data)
     if family == "square_root":
         return square_root_features(function_data)
+    if family == "cubic":
+        return cubic_features(function_data)
     return {}
 
 
@@ -452,21 +612,64 @@ def interval_to(value):
     return f"(-∞, {value}]"
 
 
-def domain_for(function_data):
+def interval_between(low, high):
+    return f"[{clean_number(low)}, {clean_number(high)}]"
+
+
+def interval_union(intervals):
+    return " ∪ ".join(interval_between(low, high) for low, high in intervals)
+
+
+def domain_for(function_data, domain_segments=None):
+    if domain_segments:
+        return interval_union((segment["low"], segment["high"]) for segment in domain_segments)
     if function_data["family"] == "square_root":
         h = function_data["h"]
         return interval_from(h)
     return interval_all_real()
 
 
-def range_for(function_data):
+def range_for(function_data, domain_segments=None):
+    if domain_segments:
+        return interval_union(merged_range_intervals(function_data, domain_segments))
+
     family = function_data["family"]
-    if family == "linear":
+    if family in ("linear", "cubic"):
         return interval_all_real()
     if family in ("quadratic", "absolute_value", "square_root"):
         k = function_data["k"]
         return interval_from(k) if function_data["a"] > 0 else interval_to(k)
     return interval_all_real()
+
+
+def critical_x_values(function_data):
+    if function_data["family"] in ("quadratic", "absolute_value"):
+        return (function_data["h"],)
+    return ()
+
+
+def range_interval_on_segment(function_data, segment):
+    low = segment["low"]
+    high = segment["high"]
+    candidates = [low, high]
+    candidates.extend(x for x in critical_x_values(function_data) if low <= x <= high)
+    y_values = [
+        y
+        for y in (evaluate_function_data(function_data, x) for x in candidates)
+        if y is not None
+    ]
+    return clean_number(min(y_values)), clean_number(max(y_values))
+
+
+def merged_range_intervals(function_data, domain_segments):
+    intervals = sorted(range_interval_on_segment(function_data, segment) for segment in domain_segments)
+    merged = []
+    for low, high in intervals:
+        if not merged or low > merged[-1][1]:
+            merged.append([low, high])
+        else:
+            merged[-1][1] = max(merged[-1][1], high)
+    return tuple((low, high) for low, high in merged)
 
 
 def equation_for(function_data):
@@ -477,7 +680,9 @@ def equation_for(function_data):
         return format_quadratic_vertex_equation(function_data)
     if family == "absolute_value":
         return format_absolute_value_equation(function_data)
-    return format_square_root_equation(function_data)
+    if family == "square_root":
+        return format_square_root_equation(function_data)
+    return format_cubic_transformed_equation(function_data)
 
 
 def signed_raw(value):
@@ -529,8 +734,10 @@ def raw_function_expression(function_data):
         expression = f'{raw_coefficient_prefix(function_data["a"])}({raw_shift_expression(function_data["h"])})^2'
     elif family == "absolute_value":
         expression = f'{raw_coefficient_prefix(function_data["a"])}abs({raw_shift_expression(function_data["h"])})'
-    else:
+    elif family == "square_root":
         expression = f'{raw_coefficient_prefix(function_data["a"])}sqrt({raw_shift_expression(function_data["h"])})'
+    else:
+        expression = f'{raw_coefficient_prefix(function_data["a"])}({raw_shift_expression(function_data["h"])})^3'
 
     k = function_data.get("k", 0)
     return f"{expression}{signed_raw(k)}" if k else expression
@@ -604,8 +811,8 @@ def render_evaluating_functions_problem(data, difficulty):
     )
 
 
-def evaluating_functions(difficulty):
-    data = EVALUATING_FUNCTIONS_PROBLEM_TYPE.generate(difficulty)
+def evaluating_functions(difficulty, options=None):
+    data = EVALUATING_FUNCTIONS_PROBLEM_TYPE.generate(difficulty, options)
     return render_evaluating_functions_problem(data, difficulty)
 
 
@@ -637,11 +844,14 @@ def domain_range_answer_fields(data):
 
 def render_domain_range_problem(data, difficulty):
     function_data = data["function"]
+    domain_segments = data.get("domain_segments") or None
     equation = equation_for(function_data)
     answer_fields = domain_range_answer_fields(data)
     answer_summary = "; ".join(f'{field["label"]}: {field["correct_answer"]}' for field in answer_fields)
-    graph_bounds = function_data_graph_bounds(function_data)
+    graph_bounds = function_data_graph_bounds(function_data, domain_segments)
     graph_features = features_for_function(function_data)
+    if domain_segments:
+        graph_features["domain_segments"] = domain_segments
 
     return create_problem(
         topic=DOMAIN_RANGE_PROBLEM_TYPE.topic,
@@ -664,8 +874,8 @@ def render_domain_range_problem(data, difficulty):
     )
 
 
-def domain_and_range(difficulty):
-    data = DOMAIN_RANGE_PROBLEM_TYPE.generate(difficulty)
+def domain_and_range(difficulty, options=None):
+    data = DOMAIN_RANGE_PROBLEM_TYPE.generate(difficulty, options)
     return render_domain_range_problem(data, difficulty)
 
 
@@ -685,14 +895,23 @@ def domain_range_solution(function_data, domain, range_value):
     return f"This {family} function has domain {domain} and range {range_value}."
 
 
-def parent_functions(difficulty):
-    choices = [
-        ("y = (x - 3)^2 + 4", "quadratic"),
-        ("y = |x + 2| - 5", "absolute value"),
-        ("y = sqrt(x - 1)", "square root"),
-        ("y = 2^(x - 4)", "exponential"),
-    ]
-    equation, answer = choices[randint(0, len(choices) - 1)]
+PARENT_FUNCTION_CHOICES = (
+    {"family": "quadratic", "equation": "y = (x - 3)^2 + 4", "answer": "quadratic"},
+    {"family": "absolute_value", "equation": "y = |x + 2| - 5", "answer": "absolute value"},
+    {"family": "square_root", "equation": "y = sqrt(x - 1)", "answer": "square root"},
+    {"family": "exponential", "equation": "y = 2^(x - 4)", "answer": "exponential"},
+)
+
+
+def parent_functions(difficulty, options=None):
+    options = options if isinstance(options, dict) else {}
+    config = options.get("topic_config") if isinstance(options.get("topic_config"), dict) else options
+    valid_families = tuple(choice["family"] for choice in PARENT_FUNCTION_CHOICES)
+    selected_families = selected_values(config, "parentFamilies", valid_families)
+    choices = tuple(choice for choice in PARENT_FUNCTION_CHOICES if choice["family"] in selected_families)
+    choice = random_from(choices)
+    equation = choice["equation"]
+    answer = choice["answer"]
     return create_problem(
         topic="parent_functions",
         problem_type="identify_parent_family",
@@ -704,7 +923,7 @@ def parent_functions(difficulty):
         acceptable_answers=[answer],
         hint="Ignore shifts, stretches, and reflections. Focus on the core shape.",
         solution=f"The core function family is {answer}.",
-        metadata={},
+        metadata={"family": choice["family"]},
         graph_config=no_graph_config(),
     )
 

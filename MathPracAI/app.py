@@ -9,6 +9,7 @@ from models import problem_from_form
 from renderers import (
     default_question_view_values,
     render_page,
+    selected_topic_config_values,
     topic_config_field_names,
     valid_question_view_values,
 )
@@ -81,15 +82,33 @@ def apply_question_view_state(state, choose_new_active=False):
     state["active_question_view"] = active_view
 
 
+def generation_options(state):
+    topic = state["topic"] if state.get("topic") in GENERATORS else "evaluating_functions"
+    topic_config = selected_topic_config_values(state, topic)
+    question_views = selected_question_views(state, topic)
+    presentation = state.get("active_question_view")
+    if presentation not in question_views:
+        presentation = question_views[0]
+    return {
+        "topic_config": topic_config,
+        "questionViews": (presentation,),
+    }
+
+
+def generate_problem(topic, difficulty, state):
+    return GENERATORS[topic](difficulty, generation_options(state))
+
+
 def reset_for_new_problem(state):
     unit = state["unit"] if state["unit"] in UNITS else "unit1"
     topic = state["topic"] if valid_topic_for_unit(unit, state["topic"]) else UNITS[unit]["topics"][0][0]
     difficulty = state["difficulty"] if state["difficulty"] in DIFFICULTIES else "easy"
-    next_problem = GENERATORS[topic](difficulty)
 
     state["unit"] = unit
     state["topic"] = topic
     state["difficulty"] = difficulty
+    apply_question_view_state(state, choose_new_active=True)
+    next_problem = generate_problem(topic, difficulty, state)
     state["problem"] = next_problem
     state["answer"] = next_problem.answer
     state["hint_visible"] = ""
@@ -97,7 +116,6 @@ def reset_for_new_problem(state):
     state["answered"] = ""
     state["feedback"] = ""
     state["feedback_type"] = "empty"
-    apply_question_view_state(state, choose_new_active=True)
 
 
 def render_app_page(state):
@@ -175,14 +193,14 @@ class MathPracHandler(BaseHTTPRequestHandler):
                 query["unit"] = unit
                 query["topic"] = topic
                 query["difficulty"] = difficulty
-                query["problem"] = GENERATORS[topic](difficulty)
+                apply_question_view_state(query, choose_new_active=True)
+                query["problem"] = generate_problem(topic, difficulty, query)
                 query["feedback"] = ""
                 query["feedback_type"] = "empty"
                 query["hint_visible"] = ""
                 query["solution_visible"] = ""
                 query["answered"] = ""
                 query["generated"] = "true"
-                apply_question_view_state(query, choose_new_active=True)
             self.respond(render_app_page(query))
             return
 

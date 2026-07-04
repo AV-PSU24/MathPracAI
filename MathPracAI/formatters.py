@@ -91,3 +91,11 @@ def format_square_root_equation(function_data):
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
     return f"f(x) = {coefficient}sqrt(x{signed_spaced(-h)}){signed_spaced(k)}" if k else f"f(x) = {coefficient}sqrt(x{signed_spaced(-h)})"
+
+
+def format_cubic_transformed_equation(function_data):
+    a = function_data["a"]
+    h = function_data["h"]
+    k = function_data["k"]
+    coefficient = "" if a == 1 else "-" if a == -1 else str(a)
+    return f"f(x) = {coefficient}(x{signed_spaced(-h)})³{signed_spaced(k)}" if k else f"f(x) = {coefficient}(x{signed_spaced(-h)})³"

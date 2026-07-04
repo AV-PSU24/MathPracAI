@@ -38,6 +38,17 @@ QUESTION_VIEW_OPTIONS_BY_TOPIC = {
     "domain_and_range": (("equation", "Given equation"), ("graph", "Given graph")),
 }
 TOPIC_CONFIG_SECTIONS_BY_TOPIC = {
+    "evaluating_functions": (
+        {
+            "key": "functionFamilies",
+            "label": "Function Families",
+            "options": (
+                ("linear", "Linear"),
+                ("quadratic", "Quadratic"),
+                ("polynomial", "Polynomial"),
+            ),
+        },
+    ),
     "domain_and_range": (
         {
             "key": "functionFamilies",
@@ -45,6 +56,8 @@ TOPIC_CONFIG_SECTIONS_BY_TOPIC = {
             "options": (
                 ("linear", "Linear"),
                 ("quadratic", "Quadratic"),
+                ("absolute_value", "Absolute value"),
+                ("square_root", "Square root"),
                 ("cubic", "Cubic"),
             ),
         },
@@ -66,6 +79,18 @@ TOPIC_CONFIG_SECTIONS_BY_TOPIC = {
             ),
         },
     ),
+    "parent_functions": (
+        {
+            "key": "parentFamilies",
+            "label": "Parent Families",
+            "options": (
+                ("quadratic", "Quadratic"),
+                ("absolute_value", "Absolute value"),
+                ("square_root", "Square root"),
+                ("exponential", "Exponential"),
+            ),
+        },
+    ),
 }
 
 
@@ -78,7 +103,7 @@ def valid_question_view_values(topic):
 
 
 def default_question_view_values(topic):
-    return valid_question_view_values(topic)
+    return valid_question_view_values(topic)[:1]
 
 
 def topic_config_sections(topic):
@@ -93,23 +118,28 @@ def topic_config_field_names():
     )
 
 
-def default_topic_config_values(section):
+def valid_topic_config_values(section):
     return tuple(value for value, _label in section["options"])
+
+
+def default_topic_config_values(section):
+    return valid_topic_config_values(section)[:1]
 
 
 def selected_topic_config_values(state, topic):
     selections = {}
     for section in topic_config_sections(topic):
         key = section["key"]
-        valid_values = default_topic_config_values(section)
-        raw_value = state.get(key, valid_values)
+        valid_values = valid_topic_config_values(section)
+        default_values = default_topic_config_values(section)
+        raw_value = state.get(key, default_values)
         if isinstance(raw_value, str):
             raw_values = (raw_value,)
         else:
             raw_values = tuple(raw_value)
 
         selected = tuple(value for value in valid_values if value in raw_values)
-        selections[key] = selected or valid_values
+        selections[key] = selected or default_values
     return selections
 
 
@@ -509,35 +539,54 @@ def render_graph_grid(view):
     return "\n".join(minor_lines + major_lines + axes + tick_marks + labels)
 
 
-def sampled_function_segments(compiled_expression, x_min, x_max, y_min, y_max):
+def normalized_domain_segments(graph_config, x_min, x_max):
+    features = graph_config.get("features", {}) if isinstance(graph_config, dict) else {}
+    raw_segments = features.get("domain_segments") if isinstance(features, dict) else None
     segments = []
-    current_segment = []
-    previous_screen_y = None
-    step = (x_max - x_min) / (GRAPH_SAMPLE_COUNT - 1)
-
-    for index in range(GRAPH_SAMPLE_COUNT):
-        x_value = x_min + (index * step)
-        y_value = evaluated_function_value(compiled_expression, x_value)
-        visible = y_value is not None and y_min <= y_value <= y_max
-        if not visible:
-            if len(current_segment) > 1:
-                segments.append(current_segment)
-            current_segment = []
-            previous_screen_y = None
+    for segment in raw_segments if isinstance(raw_segments, list) else []:
+        if not isinstance(segment, dict):
             continue
+        low = graph_number(segment.get("low"), None)
+        high = graph_number(segment.get("high"), None)
+        if low is None or high is None or low >= high:
+            continue
+        segments.append({"low": max(low, x_min), "high": min(high, x_max)})
+    return [segment for segment in segments if segment["low"] < segment["high"]]
 
-        x_pos = screen_x(x_value, x_min, x_max)
-        y_pos = screen_y(y_value, y_min, y_max)
-        if previous_screen_y is not None and abs(y_pos - previous_screen_y) > GRAPH_HEIGHT * 0.55:
-            if len(current_segment) > 1:
-                segments.append(current_segment)
-            current_segment = []
 
-        current_segment.append((x_pos, y_pos))
-        previous_screen_y = y_pos
+def sampled_function_segments(compiled_expression, x_min, x_max, y_min, y_max, domain_segments=None):
+    segments = []
+    sample_ranges = domain_segments or ({"low": x_min, "high": x_max},)
+    for sample_range in sample_ranges:
+        current_segment = []
+        previous_screen_y = None
+        sample_min = sample_range["low"]
+        sample_max = sample_range["high"]
+        step = (sample_max - sample_min) / (GRAPH_SAMPLE_COUNT - 1)
 
-    if len(current_segment) > 1:
-        segments.append(current_segment)
+        for index in range(GRAPH_SAMPLE_COUNT):
+            x_value = sample_min + (index * step)
+            y_value = evaluated_function_value(compiled_expression, x_value)
+            visible = y_value is not None and y_min <= y_value <= y_max
+            if not visible:
+                if len(current_segment) > 1:
+                    segments.append(current_segment)
+                current_segment = []
+                previous_screen_y = None
+                continue
+
+            x_pos = screen_x(x_value, x_min, x_max)
+            y_pos = screen_y(y_value, y_min, y_max)
+            if previous_screen_y is not None and abs(y_pos - previous_screen_y) > GRAPH_HEIGHT * 0.55:
+                if len(current_segment) > 1:
+                    segments.append(current_segment)
+                current_segment = []
+
+            current_segment.append((x_pos, y_pos))
+            previous_screen_y = y_pos
+
+        if len(current_segment) > 1:
+            segments.append(current_segment)
     return segments
 
 
@@ -716,7 +765,8 @@ def render_graph(graph_config, show_caption=True):
     x_max = view["x_max"]
     y_min = view["y_min"]
     y_max = view["y_max"]
-    segments = sampled_function_segments(compiled_expression, x_min, x_max, y_min, y_max)
+    domain_segments = normalized_domain_segments(graph_config, x_min, x_max)
+    segments = sampled_function_segments(compiled_expression, x_min, x_max, y_min, y_max, domain_segments)
     grid = render_graph_grid(view)
     paths = render_function_paths(segments)
     points = render_graph_points(graph_config.get("points", []), x_min, x_max, y_min, y_max)
@@ -762,6 +812,88 @@ def render_problem_display(problem, active_question_view="equation"):
         if rendered_asset:
             parts.append(rendered_asset)
     return "<br><br>".join(parts)
+
+
+def problem_text_view(problem):
+    parts = []
+    if problem.display_equation:
+        parts.append(render_math_text(problem.display_equation))
+    if problem.prompt:
+        parts.append(render_math_text(problem.prompt))
+    for asset in problem.assets:
+        rendered_asset = render_asset(asset)
+        if rendered_asset:
+            parts.append(rendered_asset)
+    return "<br><br>".join(parts)
+
+
+def problem_prompt_view(problem):
+    parts = []
+    if problem.prompt:
+        parts.append(render_math_text(problem.prompt))
+    for asset in problem.assets:
+        rendered_asset = render_asset(asset)
+        if rendered_asset:
+            parts.append(rendered_asset)
+    return "<br><br>".join(parts)
+
+
+def get_problem_presentation(problem, ui_state):
+    allowed_views = tuple(ui_state.get("available_views") or ("equation",))
+    views = {"equation": None, "graph": None, "table": None}
+    text_html = problem_text_view(problem)
+    if text_html:
+        views["equation"] = {
+            "type": "text",
+            "html": text_html,
+            "supportsText": True,
+            "hasTextView": True,
+        }
+    if "graph" in allowed_views and problem.graph_config.get("enabled"):
+        views["graph"] = {
+            "type": "graph",
+            "graph": problem.graph_config,
+            "promptHtml": problem_prompt_view(problem),
+            "supportsGraph": True,
+            "hasGraphView": True,
+        }
+
+    available_views = tuple(view for view in allowed_views if views.get(view))
+    if not available_views and views["equation"]:
+        available_views = ("equation",)
+
+    selected_view = ui_state.get("selected_view")
+    if selected_view not in available_views:
+        selected_view = available_views[0] if available_views else "equation"
+
+    answer_fields = problem.answer_fields or [{"name": "user_answer", "label": "Answer", "type": "text"}]
+    return {
+        "prompt": problem.prompt,
+        "questionPrompt": problem.prompt,
+        "views": views,
+        "availableViews": available_views,
+        "selectedView": selected_view,
+        "answerFields": answer_fields,
+        "answerInputType": "fields" if len(answer_fields) > 1 else "single",
+        "answerPlaceholder": "type answer",
+        "supportsText": views["equation"] is not None,
+        "hasTextView": views["equation"] is not None,
+        "supportsGraph": views["graph"] is not None,
+        "hasGraphView": views["graph"] is not None,
+        "supportsTable": False,
+        "hasTableView": False,
+    }
+
+
+def render_problem_view(presentation):
+    selected_view = presentation["selectedView"]
+    view = presentation["views"].get(selected_view) or presentation["views"].get("equation")
+    if not view:
+        return "", ""
+    if view["type"] == "graph":
+        graph = render_graph(view["graph"], show_caption=False)
+        return view["promptHtml"], graph
+    return view["html"], ""
 
 
 def select_options(options, selected):
@@ -837,21 +969,43 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
     skip_count = count_value(state, "skip_count")
     generated = state.get("generated", "") == "true"
     active_question_view = state.get("active_question_view", "equation")
+    question_view_options = question_view_options_for_topic(topic)
+    available_question_views = tuple(value for value, _label in question_view_options)
     question_view_selections = {
         view: state.get(f"question_view_{view}") == "true"
-        for view in valid_question_view_values(topic)
+        for view in available_question_views
     }
     problem_config_selections = selected_topic_config_values(state, topic)
     show_difficulty = topic_uses_difficulty(topic)
 
     if problem is None:
-        problem = generators[topic](difficulty)
+        selected_question_views = tuple(
+            view for view, selected in question_view_selections.items() if selected
+        ) or default_question_view_values(topic)
+        presentation = active_question_view if active_question_view in selected_question_views else selected_question_views[0]
+        problem = generators[topic](
+            difficulty,
+            {
+                "topic_config": problem_config_selections,
+                "questionViews": (presentation,),
+            },
+        )
+
+    problem_presentation = get_problem_presentation(
+        problem,
+        {
+            "available_views": available_question_views,
+            "selected_view": active_question_view,
+        },
+    )
+    active_question_view = problem_presentation["selectedView"]
 
     return {
         "unit": unit,
         "topic": topic,
         "difficulty": difficulty,
         "problem": problem,
+        "problem_presentation": problem_presentation,
         "feedback": feedback,
         "feedback_type": feedback_type,
         "hint_visible": hint_visible,
@@ -863,6 +1017,7 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
         "skip_count": skip_count,
         "generated": generated,
         "active_question_view": active_question_view,
+        "question_view_options": question_view_options,
         "question_view_selections": question_view_selections,
         "problem_config_selections": problem_config_selections,
         "show_difficulty": show_difficulty,
@@ -936,8 +1091,7 @@ def render_problem_config_controls(context):
 
 
 def render_question_view_controls(context):
-    topic = context["topic"]
-    options = question_view_options_for_topic(topic)
+    options = context["question_view_options"]
     if len(options) <= 1:
         return ""
 
@@ -990,7 +1144,7 @@ def render_answer_form(context):
     skip_disabled = " disabled" if solution_visible or correct_checked else ""
     primary_action = "next" if correct_checked or solution_visible else "check"
     primary_label = "Next Problem" if primary_action == "next" else "Check"
-    answer_controls = render_answer_controls(problem)
+    answer_controls = render_answer_controls(context["problem_presentation"])
     problem_config_inputs = render_problem_config_hidden_inputs(context)
 
     return f"""        <form class="answer-panel" action="/check" method="post">
@@ -1022,8 +1176,8 @@ def render_answer_form(context):
         </form>"""
 
 
-def render_answer_controls(problem):
-    fields = problem.answer_fields or [{"name": "user_answer", "label": "Answer", "type": "text"}]
+def render_answer_controls(presentation):
+    fields = presentation["answerFields"]
     if len(fields) == 1:
         return render_answer_control(fields[0], "user_answer")
 
@@ -1096,12 +1250,7 @@ def render_problem_panel(context, unit_label, topic_label):
     feedback = render_feedback(context)
     help_stack = render_help_stack(context)
     stats = render_stats(context)
-    active_question_view = context["active_question_view"]
-    graph = (
-        render_graph(problem.graph_config, show_caption=False)
-        if active_question_view == "graph" and problem.graph_config.get("enabled")
-        else ""
-    )
+    question_html, graph = render_problem_view(context["problem_presentation"])
     difficulty_badge = (
         f'<span data-badge="difficulty">{escape(difficulty.title())}</span>'
         if context["show_difficulty"]
@@ -1116,7 +1265,7 @@ def render_problem_panel(context, unit_label, topic_label):
           {difficulty_badge}
         </div>
 
-        <h1>{render_problem_display(problem, active_question_view)}</h1>
+        <h1>{question_html}</h1>
 
 {graph}
 

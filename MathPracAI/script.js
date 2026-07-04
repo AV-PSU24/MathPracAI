@@ -201,7 +201,10 @@ document.querySelectorAll("[data-question-view-group]").forEach((group) => {
     const checkboxes = Array.from(group.querySelectorAll("[data-question-view]"));
     if (!checkboxes.some((checkbox) => checkbox.checked)) {
       event.target.checked = true;
+      return;
     }
+
+    submitPracticeConfig(group);
   });
 });
 
@@ -214,7 +217,10 @@ document.querySelectorAll("[data-config-checkbox-group]").forEach((group) => {
     const checkboxes = Array.from(group.querySelectorAll("[data-config-checkbox]"));
     if (!checkboxes.some((checkbox) => checkbox.checked)) {
       event.target.checked = true;
+      return;
     }
+
+    submitPracticeConfig(group);
   });
 });
 
