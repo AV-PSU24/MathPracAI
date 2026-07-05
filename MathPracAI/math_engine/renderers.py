@@ -4,7 +4,8 @@ import json
 import math
 import re
 
-from models import encoded_problem
+from math_engine.models import encoded_problem
+from views.shared_views import profile_menu
 
 
 SQRT_PATTERN = re.compile(r"(?<![A-Za-z_])sqrt(?=\s*\()")
@@ -141,10 +142,6 @@ def selected_topic_config_values(state, topic):
         selected = tuple(value for value in valid_values if value in raw_values)
         selections[key] = selected or default_values
     return selections
-
-
-def topic_uses_difficulty(topic):
-    return topic != "domain_and_range"
 
 
 def render_math_text(value):
@@ -896,6 +893,20 @@ def render_problem_view(presentation):
     return view["html"], ""
 
 
+def format_duration(seconds):
+    try:
+        total = max(0, int(seconds))
+    except (TypeError, ValueError):
+        total = 0
+    minutes = total // 60
+    remainder = total % 60
+    return f"{minutes:02d}:{remainder:02d}"
+
+
+def short_unit_label(label):
+    return re.sub(r"^Unit \d+:\s*", "", label)
+
+
 def select_options(options, selected):
     html = []
     for value, label in options:
@@ -944,14 +955,10 @@ def custom_dropdown(name, label, options, selected, option_attrs=None):
         </div>"""
 
 
-def page_context(state, units, difficulties, generators, valid_topic_for_unit, count_value):
+def page_context(state, units, generators, valid_topic_for_unit, count_value):
     unit = state.get("unit", "unit1")
     if unit not in units:
         unit = "unit1"
-
-    difficulty = state.get("difficulty", "easy")
-    if difficulty not in difficulties:
-        difficulty = "easy"
 
     topic = state.get("topic") or units[unit]["topics"][0][0]
     if not valid_topic_for_unit(unit, topic):
@@ -976,7 +983,23 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
         for view in available_question_views
     }
     problem_config_selections = selected_topic_config_values(state, topic)
-    show_difficulty = topic_uses_difficulty(topic)
+    ui_mode = state.get("ui_mode", "practice")
+    test_total = max(1, count_value(state, "test_total") or 10)
+    test_index = max(1, count_value(state, "test_index") or 1)
+    test_correct = count_value(state, "test_correct")
+    test_incorrect = count_value(state, "test_incorrect")
+    test_skipped = count_value(state, "test_skipped")
+    test_hints = count_value(state, "test_hints")
+    test_elapsed = count_value(state, "test_elapsed")
+    test_timer_mode = state.get("test_timer_mode", "stopwatch")
+    if test_timer_mode not in ("stopwatch", "countdown"):
+        test_timer_mode = "stopwatch"
+    test_time_limit = max(1, count_value(state, "test_time_limit") or 30)
+    raw_test_topics = state.get("test_topics", ())
+    if isinstance(raw_test_topics, str):
+        raw_test_topics = (raw_test_topics,)
+    test_topics = tuple(value for value in raw_test_topics if "|" in value) or (f"{unit}|{topic}",)
+    test_breakdown = state.get("test_breakdown", "{}")
 
     if problem is None:
         selected_question_views = tuple(
@@ -984,7 +1007,7 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
         ) or default_question_view_values(topic)
         presentation = active_question_view if active_question_view in selected_question_views else selected_question_views[0]
         problem = generators[topic](
-            difficulty,
+            "easy",
             {
                 "topic_config": problem_config_selections,
                 "questionViews": (presentation,),
@@ -1003,7 +1026,6 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
     return {
         "unit": unit,
         "topic": topic,
-        "difficulty": difficulty,
         "problem": problem,
         "problem_presentation": problem_presentation,
         "feedback": feedback,
@@ -1020,42 +1042,55 @@ def page_context(state, units, difficulties, generators, valid_topic_for_unit, c
         "question_view_options": question_view_options,
         "question_view_selections": question_view_selections,
         "problem_config_selections": problem_config_selections,
-        "show_difficulty": show_difficulty,
+        "ui_mode": ui_mode,
+        "test_total": test_total,
+        "test_index": test_index,
+        "test_correct": test_correct,
+        "test_incorrect": test_incorrect,
+        "test_skipped": test_skipped,
+        "test_hints": test_hints,
+        "test_elapsed": test_elapsed,
+        "test_timer_mode": test_timer_mode,
+        "test_time_limit": test_time_limit,
+        "test_topics": test_topics,
+        "test_breakdown": test_breakdown,
+        "auth_user": state.get("auth_user"),
     }
 
 
-def render_control_panel(context, units, difficulties):
+def render_control_panel(context, units):
     unit = context["unit"]
     topic = context["topic"]
-    difficulty = context["difficulty"]
     unit_options = tuple((value, data["label"]) for value, data in units.items())
     topic_options = tuple(units[unit]["topics"])
-    difficulty_options = tuple((item, item.title()) for item in difficulties)
     unit_dropdown = custom_dropdown("unit", "Unit", unit_options, unit, unit_option_attrs(units))
     topic_dropdown = custom_dropdown("topic", "Topic", topic_options, topic)
-    difficulty_dropdown = custom_dropdown("difficulty", "Difficulty", difficulty_options, difficulty)
     question_view_controls = render_question_view_controls(context)
     problem_config_controls = render_problem_config_controls(context)
-    difficulty_control = (
-        difficulty_dropdown
-        if context["show_difficulty"]
-        else f'<input type="hidden" name="difficulty" value="{escape(difficulty)}">'
-    )
 
-    return f"""      <form class="control-panel" action="/generate" method="get">
-        <div class="panel-title">
-          <span>MathPrac AI</span>
+    auth_profile = profile_menu(context["auth_user"]) if context.get("auth_user") else ""
+
+    return f"""      <aside class="sidebar-shell">
+      <form class="control-panel" action="/generate" method="get">
+        <div class="sidebar-brand">
+          <div class="brand-mark">M</div>
+          <span>MathPracAI</span>
         </div>
+        <input type="hidden" name="ui_mode" value="practice">
         <input type="hidden" name="correct_count" value="{context["correct_count"]}">
         <input type="hidden" name="hint_count" value="{context["hint_count"]}">
         <input type="hidden" name="incorrect_count" value="{context["incorrect_count"]}">
         <input type="hidden" name="skip_count" value="{context["skip_count"]}">
         {unit_dropdown}
         {topic_dropdown}
-        {difficulty_control}
         {problem_config_controls}
         {question_view_controls}
-      </form>"""
+      </form>
+      <div class="sidebar-footer">
+        <button class="secondary-action" type="button" data-open-test-modal>Start Test</button>
+        {auth_profile}
+      </div>
+      </aside>"""
 
 
 def render_problem_config_controls(context):
@@ -1132,7 +1167,6 @@ def render_problem_config_hidden_inputs(context):
 def render_answer_form(context):
     unit = context["unit"]
     topic = context["topic"]
-    difficulty = context["difficulty"]
     problem = context["problem"]
     hint_visible = context["hint_visible"]
     solution_visible = context["solution_visible"]
@@ -1144,13 +1178,30 @@ def render_answer_form(context):
     skip_disabled = " disabled" if solution_visible or correct_checked else ""
     primary_action = "next" if correct_checked or solution_visible else "check"
     primary_label = "Next Problem" if primary_action == "next" else "Check"
+    if context["ui_mode"] == "test_progress":
+        primary_action = "next" if answered else "check"
+        primary_label = "Next Question" if primary_action == "next" else "Check Answer"
+        if primary_action == "next" and context["test_index"] >= context["test_total"]:
+            primary_label = "Finish Test"
+    elif primary_action == "check":
+        primary_label = "Check Answer"
     answer_controls = render_answer_controls(context["problem_presentation"])
     problem_config_inputs = render_problem_config_hidden_inputs(context)
+    test_hidden_inputs = render_test_hidden_inputs(context)
+    test_mode = context["ui_mode"] == "test_progress"
+    practice_actions = "" if test_mode else f"""
+            <button class="btn btn-ghost" name="action" value="hint" type="submit"{hint_disabled}>Hint</button>
+            <button class="btn btn-ghost" name="action" value="skip" type="submit"{skip_disabled}>Skip</button>
+            <button class="btn btn-ghost" name="action" value="solution" type="submit"{solution_disabled}>Solution</button>"""
+    test_actions = (
+        f'<button class="btn btn-ghost" name="action" value="skip" type="submit"{skip_disabled}>Skip</button>'
+        if test_mode and not answered
+        else ""
+    )
 
     return f"""        <form class="answer-panel" action="/check" method="post">
           <input type="hidden" name="unit" value="{escape(unit)}">
           <input type="hidden" name="topic" value="{escape(topic)}">
-          <input type="hidden" name="difficulty" value="{escape(difficulty)}">
           <input type="hidden" name="problem_json" value="{encoded_problem(problem)}">
           <input type="hidden" name="hint_visible" value="{str(hint_visible).lower()}">
           <input type="hidden" name="solution_visible" value="{str(solution_visible).lower()}">
@@ -1163,17 +1214,41 @@ def render_answer_form(context):
           <input type="hidden" name="question_view_equation" value="{str(context["question_view_selections"].get("equation", False)).lower()}">
           <input type="hidden" name="question_view_graph" value="{str(context["question_view_selections"].get("graph", False)).lower()}">
           <input type="hidden" name="active_question_view" value="{escape(context["active_question_view"])}">
+          {test_hidden_inputs}
           {problem_config_inputs}
-          <div class="answer-row">
+          <div class="answer-card">
             {answer_controls}
-          </div>
-          <div class="utility-row">
-            <button name="action" value="hint" type="submit"{hint_disabled}>Hint</button>
-            <button name="action" value="skip" type="submit"{skip_disabled}>Skip</button>
-            <button name="action" value="solution" type="submit"{solution_disabled}>Solution</button>
-            <button name="action" value="{primary_action}" type="submit">{primary_label}</button>
+            {render_inline_feedback(context)}
+            {render_help_stack(context) if not test_mode else ""}
+            <div class="utility-row">
+              <div class="secondary-actions">
+                {practice_actions}
+                {test_actions}
+              </div>
+              <button class="btn btn-accent" name="action" value="{primary_action}" type="submit">{primary_label}</button>
+            </div>
           </div>
         </form>"""
+
+
+def render_test_hidden_inputs(context):
+    topic_inputs = "\n          ".join(
+        f'<input type="hidden" name="test_topics" value="{escape(value)}">'
+        for value in context["test_topics"]
+    )
+    return f"""
+          <input type="hidden" name="ui_mode" value="{escape(context["ui_mode"])}">
+          <input type="hidden" name="test_total" value="{context["test_total"]}">
+          <input type="hidden" name="test_index" value="{context["test_index"]}">
+          <input type="hidden" name="test_correct" value="{context["test_correct"]}">
+          <input type="hidden" name="test_incorrect" value="{context["test_incorrect"]}">
+          <input type="hidden" name="test_skipped" value="{context["test_skipped"]}">
+          <input type="hidden" name="test_hints" value="{context["test_hints"]}">
+          <input type="hidden" name="test_elapsed" value="{context["test_elapsed"]}" data-test-elapsed-input>
+          <input type="hidden" name="test_timer_mode" value="{escape(context["test_timer_mode"])}">
+          <input type="hidden" name="test_time_limit" value="{context["test_time_limit"]}">
+          <input type="hidden" name="test_breakdown" value="{escape(context["test_breakdown"])}">
+          {topic_inputs}"""
 
 
 def render_answer_controls(presentation):
@@ -1200,8 +1275,10 @@ def render_labeled_answer_control(field):
 def render_answer_control(field, field_name, field_id="user_answer"):
     helpers = field.get("helpers") if isinstance(field, dict) else None
     helper_buttons = render_answer_helpers(helpers if isinstance(helpers, list) else [])
-    return f"""<input id="{escape(field_id)}" name="{escape(field_name)}" type="{escape(field.get("type", "text"))}" autocomplete="off" placeholder="type answer">
-              {helper_buttons}"""
+    return f"""<div class="answer-input-shell">
+                  <input id="{escape(field_id)}" name="{escape(field_name)}" type="{escape(field.get("type", "text"))}" autocomplete="off" placeholder="type answer">
+                  {helper_buttons}
+                </div>"""
 
 
 def render_answer_helpers(helpers):
@@ -1212,6 +1289,12 @@ def render_answer_helpers(helpers):
         for helper in helpers
     )
     return f'<div class="answer-helper-row">{buttons}</div>'
+
+
+def render_inline_feedback(context):
+    if context["feedback_type"] == "empty":
+        return ""
+    return f"""        <div class="feedback {escape(context["feedback_type"])}">{escape(context["feedback"])}</div>"""
 
 
 def render_feedback(context):
@@ -1241,46 +1324,335 @@ def render_stats(context):
         </div>"""
 
 
+def render_breadcrumb(context, unit_label, topic_label):
+    unit = short_unit_label(unit_label(context["unit"]))
+    topic = topic_label(context["topic"])
+    return f"""        <nav class="breadcrumb" aria-label="Current practice path">
+          <span>Algebra 2</span>
+          <span>{escape(unit)}</span>
+          <span>{escape(topic)}</span>
+        </nav>"""
+
+
 def render_problem_panel(context, unit_label, topic_label):
-    unit = context["unit"]
-    topic = context["topic"]
-    difficulty = context["difficulty"]
-    problem = context["problem"]
     answer_form = render_answer_form(context)
-    feedback = render_feedback(context)
-    help_stack = render_help_stack(context)
     stats = render_stats(context)
     question_html, graph = render_problem_view(context["problem_presentation"])
-    difficulty_badge = (
-        f'<span data-badge="difficulty">{escape(difficulty.title())}</span>'
-        if context["show_difficulty"]
-        else ""
-    )
+    view_class = "graph-view" if graph else "text-view"
 
     return f"""      <section class="problem-panel" aria-live="polite">
-        <div class="badges">
-          <span>Algebra 2</span>
-          <span data-badge="unit">{escape(unit_label(unit))}</span>
-          <span data-badge="topic">{escape(topic_label(topic))}</span>
-          {difficulty_badge}
+        {render_breadcrumb(context, unit_label, topic_label)}
+        <div class="problem-stack">
+          <div class="question-card {view_class}">
+            <h1>{question_html}</h1>
+            {graph}
+          </div>
+          {answer_form}
+          {stats}
         </div>
-
-        <h1>{question_html}</h1>
-
-{graph}
-
-{answer_form}
-
-{feedback}
-{help_stack}
-{stats}
       </section>"""
 
 
-def render_page(state, units, difficulties, generators, unit_label, topic_label, valid_topic_for_unit, count_value):
-    context = page_context(state, units, difficulties, generators, valid_topic_for_unit, count_value)
-    control_panel = render_control_panel(context, units, difficulties)
+def render_test_top_bar(context):
+    progress = min(100, max(0, (context["test_index"] / context["test_total"]) * 100))
+    return f"""      <header class="test-top-bar" data-test-timer data-timer-mode="{escape(context["test_timer_mode"])}" data-time-limit="{context["test_time_limit"]}" data-initial-elapsed="{context["test_elapsed"]}">
+        <div class="test-brand">
+          <div class="brand-mark small">M</div>
+          <span>MathPracAI</span>
+        </div>
+        <div class="test-progress-label">Question <strong>{context["test_index"]}</strong> <span>/ {context["test_total"]}</span></div>
+        <div class="test-progress-track"><div style="width: {progress:.2f}%"></div></div>
+        <div class="test-timer"><span aria-hidden="true">◷</span><strong data-test-time>{format_duration(context["test_elapsed"])}</strong></div>
+        <div class="test-score">
+          <span class="score-ok">✓ {context["test_correct"]}</span>
+          <span class="score-bad">× {context["test_incorrect"]}</span>
+        </div>
+      </header>"""
+
+
+def render_test_progress_page(context, unit_label, topic_label):
+    question_html, graph = render_problem_view(context["problem_presentation"])
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MathPracAI Test</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <main class="test-screen">
+{render_test_top_bar(context)}
+    <section class="test-workspace">
+      {render_breadcrumb(context, unit_label, topic_label)}
+      <div class="problem-stack">
+        <div class="question-card {'graph-view' if graph else 'text-view'}">
+          <h1>{question_html}</h1>
+          {graph}
+        </div>
+        {render_answer_form(context)}
+      </div>
+    </section>
+    <form class="exit-test-form" action="/generate" method="get">
+      <input type="hidden" name="unit" value="{escape(context["unit"])}">
+      <input type="hidden" name="topic" value="{escape(context["topic"])}">
+      <input type="hidden" name="ui_mode" value="practice">
+      <button class="exit-test" type="submit">Exit Test</button>
+    </form>
+  </main>
+</body>
+</html>"""
+
+
+def result_grade(accuracy):
+    if accuracy >= 90:
+        return "Excellent", "grade-excellent"
+    if accuracy >= 75:
+        return "Good", "grade-good"
+    if accuracy >= 60:
+        return "Fair", "grade-fair"
+    return "Needs Work", "grade-needs-work"
+
+
+def topic_parts(value):
+    if "|" not in value:
+        return "unit1", "evaluating_functions"
+    return value.split("|", 1)
+
+
+def decoded_test_breakdown(context):
+    try:
+        value = json.loads(context.get("test_breakdown", "{}"))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        value = {}
+    return value if isinstance(value, dict) else {}
+
+
+def render_test_topic_hidden_inputs(context):
+    return "\n          ".join(
+        f'<input type="hidden" name="test_topics" value="{escape(value)}">'
+        for value in context["test_topics"]
+    )
+
+
+def render_topic_breakdown_rows(context, unit_label, topic_label):
+    breakdown = decoded_test_breakdown(context)
+    rows = []
+    topic_values = tuple(breakdown.keys()) or context["test_topics"]
+    for value in topic_values:
+        unit, topic = topic_parts(value)
+        data = breakdown.get(value, {}) if isinstance(breakdown.get(value, {}), dict) else {}
+        correct = int(data.get("correct", 0))
+        incorrect = int(data.get("incorrect", 0))
+        skipped = int(data.get("skipped", 0))
+        total = max(1, correct + incorrect + skipped)
+        pct = round((correct / total) * 100)
+        rows.append(
+            f"""        <div class="topic-row">
+          <div>
+            <span>{escape(unit_label(unit))}</span>
+            <strong>{escape(topic_label(topic))}</strong>
+          </div>
+          <div class="topic-meter"><div style="width: {pct}%"></div></div>
+          <span>{correct}/{total}</span>
+        </div>"""
+        )
+    return "\n".join(rows)
+
+
+def render_test_results_page(context, unit_label, topic_label):
+    total_attempted = context["test_correct"] + context["test_incorrect"] + context["test_skipped"]
+    total = max(context["test_total"], total_attempted, 1)
+    accuracy = round((context["test_correct"] / total) * 100)
+    grade_label, grade_class = result_grade(accuracy)
+    topic_inputs = render_test_topic_hidden_inputs(context)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MathPracAI Test Results</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/script.js" defer></script>
+</head>
+<body>
+  <main class="results-screen">
+    <header class="results-top-bar">
+      <div class="test-brand"><div class="brand-mark small">M</div><span>MathPracAI</span></div>
+      <span>Test Results</span>
+    </header>
+    <section class="results-content">
+      <div class="results-hero">
+        <div class="complete-pill">Test Complete</div>
+        <p class="result-percent {grade_class}">{accuracy}%</p>
+        <p class="result-grade {grade_class}">{grade_label}</p>
+        <p>{context["test_correct"]} of {total} questions answered correctly</p>
+      </div>
+      <div class="results-grid primary-results">
+        <div><span>Score</span><strong>{context["test_correct"]}/{total}</strong></div>
+        <div><span>Accuracy</span><strong>{accuracy}%</strong></div>
+        <div><span>Time Taken</span><strong>{format_duration(context["test_elapsed"])}</strong></div>
+        <div><span>Hints Used</span><strong>{context["test_hints"]}</strong></div>
+      </div>
+      <div class="results-grid secondary-results">
+        <div><span>Correct</span><strong class="score-ok">{context["test_correct"]}</strong></div>
+        <div><span>Incorrect</span><strong class="score-bad">{context["test_incorrect"]}</strong></div>
+        <div><span>Skipped</span><strong>{context["test_skipped"]}</strong></div>
+      </div>
+      <section class="topic-breakdown">
+        <h2>Topic Breakdown</h2>
+{render_topic_breakdown_rows(context, unit_label, topic_label)}
+      </section>
+      <div class="results-actions">
+        <form action="/generate" method="get">
+          <input type="hidden" name="unit" value="{escape(context["unit"])}">
+          <input type="hidden" name="topic" value="{escape(context["topic"])}">
+          <input type="hidden" name="ui_mode" value="practice">
+          <button class="btn btn-secondary" type="submit">Back to Practice</button>
+        </form>
+        <form action="/generate" method="get">
+          <input type="hidden" name="unit" value="{escape(context["unit"])}">
+          <input type="hidden" name="topic" value="{escape(context["topic"])}">
+          <input type="hidden" name="ui_mode" value="test_progress">
+          <input type="hidden" name="test_total" value="{context["test_total"]}">
+          <input type="hidden" name="test_index" value="1">
+          <input type="hidden" name="test_timer_mode" value="{escape(context["test_timer_mode"])}">
+          <input type="hidden" name="test_time_limit" value="{context["test_time_limit"]}">
+          <input type="hidden" name="test_breakdown" value="{{}}">
+          {topic_inputs}
+          <button class="btn btn-accent" type="submit">Retake Test</button>
+        </form>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
+def render_test_setup_modal(context, units):
+    config_inputs = render_problem_config_hidden_inputs(context)
+    topic_inputs = render_test_topic_hidden_inputs(context)
+    selected_topic_chips = render_selected_test_topic_chips(context, units)
+    topic_picker = render_test_topic_picker(units)
+    return f"""      <div class="test-modal" data-test-modal aria-hidden="true">
+        <div class="test-modal-backdrop" data-close-test-modal></div>
+        <form class="test-dialog" action="/generate" method="get" role="dialog" aria-modal="true" aria-labelledby="test-dialog-title">
+          <div class="dialog-header">
+            <div>
+              <h2 id="test-dialog-title">Start Test</h2>
+              <p>Configure your test settings</p>
+            </div>
+            <button type="button" class="icon-button" data-close-test-modal aria-label="Close test setup">×</button>
+          </div>
+          <input type="hidden" name="ui_mode" value="test_progress">
+          <input type="hidden" name="unit" value="{escape(context["unit"])}" data-test-primary-unit>
+          <input type="hidden" name="topic" value="{escape(context["topic"])}" data-test-primary-topic>
+          <input type="hidden" name="test_index" value="1">
+          <input type="hidden" name="test_correct" value="0">
+          <input type="hidden" name="test_incorrect" value="0">
+          <input type="hidden" name="test_skipped" value="0">
+          <input type="hidden" name="test_hints" value="0">
+          <input type="hidden" name="test_elapsed" value="0">
+          <input type="hidden" name="test_breakdown" value="{{}}">
+          <input type="hidden" name="question_view_equation" value="{str(context["question_view_selections"].get("equation", False)).lower()}">
+          <input type="hidden" name="question_view_graph" value="{str(context["question_view_selections"].get("graph", False)).lower()}">
+          <div data-test-topic-inputs>
+            {topic_inputs}
+          </div>
+          {config_inputs}
+          <div class="dialog-body">
+            <section class="modal-field">
+              <span>Selected Topics</span>
+              <div class="selected-topic-row" data-selected-test-topics>
+                {selected_topic_chips}
+                {topic_picker}
+              </div>
+            </section>
+            <label class="modal-field">Number of Questions
+              <input type="number" name="test_total" min="1" max="100" value="10">
+            </label>
+            <div class="modal-field">
+              <span>Timer Mode</span>
+              <div class="timer-choice-row">
+                <label class="timer-option"><input type="radio" name="test_timer_mode" value="stopwatch" checked> Timer</label>
+                <label class="timer-option"><input type="radio" name="test_timer_mode" value="countdown"> Time Limit</label>
+              </div>
+            </div>
+            <label class="modal-field time-limit-field" data-time-limit-field hidden>Time Limit (minutes)
+              <input type="number" name="test_time_limit" min="1" value="30">
+            </label>
+          </div>
+          <div class="dialog-actions">
+            <button class="btn btn-secondary" type="button" data-close-test-modal>Cancel</button>
+            <button class="btn btn-accent" type="submit">Start Test</button>
+          </div>
+        </form>
+      </div>"""
+
+
+def render_selected_test_topic_chips(context, units):
+    chips = []
+    for value in context["test_topics"]:
+        unit, topic = topic_parts(value)
+        if unit not in units:
+            continue
+        label = next((topic_label for topic_value, topic_label in units[unit]["topics"] if topic_value == topic), topic)
+        chips.append(
+            f"""<span class="selected-topic-chip" data-test-topic-chip data-value="{escape(value)}">
+                  {escape(label)}
+                  <button type="button" data-remove-test-topic aria-label="Remove {escape(label)}">×</button>
+                </span>"""
+        )
+    return "".join(chips)
+
+
+def render_test_topic_picker(units):
+    unit_buttons = []
+    topic_panels = []
+    for unit, data in units.items():
+        unit_buttons.append(
+            f"""<button type="button" class="topic-picker-option" data-topic-picker-unit="{escape(unit)}">
+                <span>{escape(data["label"])}</span><span aria-hidden="true">›</span>
+              </button>"""
+        )
+        topic_buttons = "".join(
+            f"""<button type="button" class="topic-picker-option" data-topic-picker-topic="{escape(topic)}" data-unit="{escape(unit)}" data-label="{escape(label)}">
+                  <span>{escape(label)}</span><span class="already-added" aria-hidden="true">✓</span>
+                </button>"""
+            for topic, label in data["topics"]
+        )
+        topic_panels.append(
+            f"""<div class="topic-picker-panel" data-topic-picker-panel="{escape(unit)}">
+              {topic_buttons}
+            </div>"""
+        )
+
+    return f"""<div class="topic-picker" data-topic-picker>
+              <button type="button" class="topic-picker-trigger" data-topic-picker-trigger aria-label="Add topic">+</button>
+              <div class="topic-picker-menu" data-topic-picker-menu hidden>
+                <div class="topic-picker-header">
+                  <button type="button" data-topic-picker-back hidden>‹</button>
+                  <span data-topic-picker-title>Select a unit</span>
+                </div>
+                <div class="topic-picker-step" data-topic-picker-units>
+                  {''.join(unit_buttons)}
+                </div>
+                {''.join(topic_panels)}
+              </div>
+            </div>"""
+
+
+def render_page(state, units, generators, unit_label, topic_label, valid_topic_for_unit, count_value):
+    context = page_context(state, units, generators, valid_topic_for_unit, count_value)
+    if context["ui_mode"] == "test_progress":
+        return render_test_progress_page(context, unit_label, topic_label)
+    if context["ui_mode"] == "test_results":
+        return render_test_results_page(context, unit_label, topic_label)
+
+    control_panel = render_control_panel(context, units)
     problem_panel = render_problem_panel(context, unit_label, topic_label)
+    test_modal = render_test_setup_modal(context, units)
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1298,6 +1670,7 @@ def render_page(state, units, difficulties, generators, unit_label, topic_label,
 
 {problem_panel}
     </section>
+{test_modal}
   </main>
 </body>
 </html>"""

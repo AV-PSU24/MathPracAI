@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from math import ceil, floor, isfinite, log10
 from random import randint
 
-from formatters import (
+from math_engine.formatters import (
     format_absolute_value_equation,
     format_cubic_transformed_equation,
     format_function_equation,
@@ -11,7 +11,7 @@ from formatters import (
     format_quadratic_vertex_equation,
     format_square_root_equation,
 )
-from models import Problem, function_graph_config, no_graph_config
+from math_engine.models import Problem, function_graph_config, no_graph_config
 
 
 GRAPH_PADDING_RATIO = 0.12
@@ -731,13 +731,17 @@ def raw_function_expression(function_data):
     if family == "linear":
         expression = raw_polynomial_expression([function_data["m"], function_data["b"]])
     elif family == "quadratic":
-        expression = f'{raw_coefficient_prefix(function_data["a"])}({raw_shift_expression(function_data["h"])})^2'
+        base = raw_shift_expression(function_data["h"])
+        wrapped_base = base if function_data["h"] == 0 else f"({base})"
+        expression = f'{raw_coefficient_prefix(function_data["a"])}{wrapped_base}^2'
     elif family == "absolute_value":
         expression = f'{raw_coefficient_prefix(function_data["a"])}abs({raw_shift_expression(function_data["h"])})'
     elif family == "square_root":
         expression = f'{raw_coefficient_prefix(function_data["a"])}sqrt({raw_shift_expression(function_data["h"])})'
     else:
-        expression = f'{raw_coefficient_prefix(function_data["a"])}({raw_shift_expression(function_data["h"])})^3'
+        base = raw_shift_expression(function_data["h"])
+        wrapped_base = base if function_data["h"] == 0 else f"({base})"
+        expression = f'{raw_coefficient_prefix(function_data["a"])}{wrapped_base}^3'
 
     k = function_data.get("k", 0)
     return f"{expression}{signed_raw(k)}" if k else expression

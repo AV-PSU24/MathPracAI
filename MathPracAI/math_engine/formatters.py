@@ -74,7 +74,9 @@ def format_quadratic_vertex_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}(x{signed_spaced(-h)})²{signed_spaced(k)}" if k else f"f(x) = {coefficient}(x{signed_spaced(-h)})²"
+    base = "x" if h == 0 else f"(x{signed_spaced(-h)})"
+    expression = f"{coefficient}{base}²"
+    return f"f(x) = {expression}{signed_spaced(k)}" if k else f"f(x) = {expression}"
 
 
 def format_absolute_value_equation(function_data):
@@ -82,7 +84,9 @@ def format_absolute_value_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}|x{signed_spaced(-h)}|{signed_spaced(k)}" if k else f"f(x) = {coefficient}|x{signed_spaced(-h)}|"
+    inside = "x" if h == 0 else f"x{signed_spaced(-h)}"
+    expression = f"{coefficient}|{inside}|"
+    return f"f(x) = {expression}{signed_spaced(k)}" if k else f"f(x) = {expression}"
 
 
 def format_square_root_equation(function_data):
@@ -90,7 +94,9 @@ def format_square_root_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}sqrt(x{signed_spaced(-h)}){signed_spaced(k)}" if k else f"f(x) = {coefficient}sqrt(x{signed_spaced(-h)})"
+    inside = "x" if h == 0 else f"x{signed_spaced(-h)}"
+    expression = f"{coefficient}sqrt({inside})"
+    return f"f(x) = {expression}{signed_spaced(k)}" if k else f"f(x) = {expression}"
 
 
 def format_cubic_transformed_equation(function_data):
@@ -98,4 +104,6 @@ def format_cubic_transformed_equation(function_data):
     h = function_data["h"]
     k = function_data["k"]
     coefficient = "" if a == 1 else "-" if a == -1 else str(a)
-    return f"f(x) = {coefficient}(x{signed_spaced(-h)})³{signed_spaced(k)}" if k else f"f(x) = {coefficient}(x{signed_spaced(-h)})³"
+    base = "x" if h == 0 else f"(x{signed_spaced(-h)})"
+    expression = f"{coefficient}{base}³"
+    return f"f(x) = {expression}{signed_spaced(k)}" if k else f"f(x) = {expression}"
