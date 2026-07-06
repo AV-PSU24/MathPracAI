@@ -7,7 +7,6 @@ from routes.auth_routes import auth_bp
 from routes.dashboard_routes import dashboard_bp
 from routes.practice_routes import practice_bp
 
-
 ROOT = Path(__file__).parent
 PORT = int(os.environ.get("PORT", "8010"))
 

@@ -1,5 +1,10 @@
 from firebase_backend.config import FirebaseUnavailable, firestore_client, server_timestamp
 
+try:
+    from google.cloud.firestore_v1 import FieldFilter
+except ImportError:
+    FieldFilter = None
+
 
 def _db():
     return firestore_client()
@@ -16,6 +21,12 @@ def _first(query):
     return docs[0] if docs else None
 
 
+def _where(query, field_path, op_string, value):
+    if FieldFilter is None:
+        return query.where(field_path, op_string, value)
+    return query.where(filter=FieldFilter(field_path, op_string, value))
+
+
 def get_user_profile(uid):
     if not uid:
         return None
@@ -30,13 +41,14 @@ def get_user_profile(uid):
     return data
 
 
-def create_user_profile(uid, first_name, last_name, email, role, tutor_id=None):
+def create_user_profile(uid, first_name, last_name, email, role, tutor_id=None, auth_provider="email"):
     data = {
         "firstName": first_name.strip(),
         "lastName": last_name.strip(),
         "email": email.strip().lower(),
         "role": role,
         "tutorId": tutor_id,
+        "authProvider": auth_provider,
         "createdAt": server_timestamp(),
         "lastActiveAt": server_timestamp(),
     }
@@ -58,12 +70,9 @@ def validate_class_code(code):
     normalized = normalize_code(code)
     if not normalized:
         return None
-    query = (
-        _db()
-        .collection("classCodes")
-        .where("code", "==", normalized)
-        .where("active", "==", True)
-    )
+    query = _db().collection("classCodes")
+    query = _where(query, "code", "==", normalized)
+    query = _where(query, "active", "==", True)
     doc = _first(query)
     return _doc_to_dict(doc) if doc else None
 
@@ -72,13 +81,10 @@ def validate_tutor_invite_code(code):
     normalized = normalize_code(code)
     if not normalized:
         return None
-    query = (
-        _db()
-        .collection("tutorInviteCodes")
-        .where("code", "==", normalized)
-        .where("active", "==", True)
-        .where("used", "==", False)
-    )
+    query = _db().collection("tutorInviteCodes")
+    query = _where(query, "code", "==", normalized)
+    query = _where(query, "active", "==", True)
+    query = _where(query, "used", "==", False)
     doc = _first(query)
     return _doc_to_dict(doc) if doc else None
 
@@ -103,7 +109,7 @@ def code_exists(code):
     if not normalized:
         return False
     for collection in ("classCodes", "tutorInviteCodes"):
-        doc = _first(_db().collection(collection).where("code", "==", normalized))
+        doc = _first(_where(_db().collection(collection), "code", "==", normalized))
         if doc:
             return True
     return False
@@ -142,22 +148,19 @@ def save_tutor_invite_code(code, admin_id):
 def list_students_for_tutor(tutor_id):
     if not tutor_id:
         return []
-    query = (
-        _db()
-        .collection("users")
-        .where("role", "==", "student")
-        .where("tutorId", "==", tutor_id)
-    )
+    query = _db().collection("users")
+    query = _where(query, "role", "==", "student")
+    query = _where(query, "tutorId", "==", tutor_id)
     return [_student_card_data(doc) for doc in query.stream()]
 
 
 def list_all_students():
-    query = _db().collection("users").where("role", "==", "student")
+    query = _where(_db().collection("users"), "role", "==", "student")
     return [_student_card_data(doc) for doc in query.stream()]
 
 
 def list_tutors():
-    query = _db().collection("users").where("role", "in", ["tutor", "admin"])
+    query = _where(_db().collection("users"), "role", "in", ["tutor", "admin"])
     return [_tutor_card_data(doc) for doc in query.stream()]
 
 
@@ -176,17 +179,16 @@ def get_tutor(tutor_id):
 
 
 def class_code_count_for_tutor(tutor_id):
-    query = (
-        _db()
-        .collection("classCodes")
-        .where("tutorId", "==", tutor_id)
-        .where("active", "==", True)
-    )
+    query = _db().collection("classCodes")
+    query = _where(query, "tutorId", "==", tutor_id)
+    query = _where(query, "active", "==", True)
     return sum(1 for _doc in query.stream())
 
 
 def student_count_for_tutor(tutor_id):
-    query = _db().collection("users").where("role", "==", "student").where("tutorId", "==", tutor_id)
+    query = _db().collection("users")
+    query = _where(query, "role", "==", "student")
+    query = _where(query, "tutorId", "==", tutor_id)
     return sum(1 for _doc in query.stream())
 
 
@@ -282,9 +284,7 @@ def record_completed_test_result(student_id, tutor_id, score, total_questions, c
 
 def latest_test_for_student(student_id):
     query = (
-        _db()
-        .collection("testResults")
-        .where("studentId", "==", student_id)
+        _where(_db().collection("testResults"), "studentId", "==", student_id)
         .order_by("completedAt", direction="DESCENDING")
     )
     doc = _first(query)

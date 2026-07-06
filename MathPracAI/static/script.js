@@ -1,5 +1,194 @@
 const dropdowns = document.querySelectorAll("[data-dropdown]");
 
+function applyAuthAnimationPhase() {
+  const panel = document.querySelector(".auth-visual-panel");
+  if (!panel) {
+    return;
+  }
+
+  const now = Date.now() / 1000;
+  const phase = (duration, offset = 0) => `-${((now + offset) % duration).toFixed(3)}s`;
+  const delays = {
+    "--auth-shape-a-delay": phase(14, 0),
+    "--auth-shape-b-delay": phase(16, 3),
+    "--auth-geometry-delay": phase(26, 7),
+    "--auth-symbol-a-delay": phase(15, 1),
+    "--auth-symbol-b-delay": phase(17, 5),
+    "--auth-symbol-c-delay": phase(19, 9),
+    "--auth-symbol-d-delay": phase(16, 12),
+    "--auth-symbol-e-delay": phase(18, 4),
+    "--auth-symbol-f-delay": phase(14, 8),
+    "--auth-symbol-g-delay": phase(20, 11),
+    "--auth-symbol-h-delay": phase(22, 15),
+    "--auth-text-delay": phase(14, 2),
+  };
+
+  Object.entries(delays).forEach(([name, value]) => {
+    panel.style.setProperty(name, value);
+  });
+}
+
+applyAuthAnimationPhase();
+
+let firebaseAuthModulesPromise = null;
+let firebaseAuthInstance = null;
+let pendingGoogleNameRequest = null;
+
+async function firebaseAuthModules() {
+  if (!firebaseAuthModulesPromise) {
+    firebaseAuthModulesPromise = Promise.all([
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js"),
+      import("https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js"),
+    ]);
+  }
+  return firebaseAuthModulesPromise;
+}
+
+async function firebaseAuthClient() {
+  if (firebaseAuthInstance) {
+    return firebaseAuthInstance;
+  }
+
+  const [appModule, authModule] = await firebaseAuthModules();
+  const response = await fetch("/auth/firebase-web-config");
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    throw new Error(data.error || "Google sign in is not configured.");
+  }
+
+  const app = appModule.initializeApp(data.config);
+  firebaseAuthInstance = authModule.getAuth(app);
+  return firebaseAuthInstance;
+}
+
+async function googleIdToken() {
+  const [_appModule, authModule] = await firebaseAuthModules();
+  const auth = await firebaseAuthClient();
+  const provider = new authModule.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  const result = await authModule.signInWithPopup(auth, provider);
+  return result.user.getIdToken();
+}
+
+function googlePayload(button, idToken, extras = {}) {
+  const payload = {
+    idToken,
+    role: button.dataset.role || "",
+    classCode: button.dataset.classCode || "",
+    inviteCode: button.dataset.inviteCode || "",
+    ...extras,
+  };
+  return payload;
+}
+
+function setGoogleError(container, message) {
+  const error = container?.querySelector("[data-google-auth-error]") || document.querySelector("[data-google-auth-error]");
+  if (!error) {
+    return;
+  }
+  error.textContent = message;
+  error.hidden = !message;
+}
+
+async function submitGoogleAuth(button, idToken, extras = {}) {
+  const response = await fetch(button.dataset.googleEndpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(googlePayload(button, idToken, extras)),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok) {
+    if (data.needsName) {
+      return data;
+    }
+    throw new Error(data.error || "Unable to continue with Google.");
+  }
+  window.location.href = data.redirect || "/";
+  return data;
+}
+
+function openGoogleNameModal(button, idToken) {
+  const modal = document.querySelector("[data-google-name-modal]");
+  if (!modal) {
+    return;
+  }
+  pendingGoogleNameRequest = { button, idToken };
+  modal.hidden = false;
+  modal.querySelector('input[name="google_first_name"]')?.focus();
+}
+
+function closeGoogleNameModal() {
+  const modal = document.querySelector("[data-google-name-modal]");
+  if (!modal) {
+    return;
+  }
+  pendingGoogleNameRequest = null;
+  modal.hidden = true;
+  modal.querySelectorAll("input").forEach((input) => {
+    input.value = "";
+  });
+}
+
+document.querySelectorAll("[data-google-auth]").forEach((button) => {
+  button.addEventListener("click", async () => {
+    const container = button.closest(".auth-provider-stack");
+    setGoogleError(container, "");
+    button.disabled = true;
+    const originalLabel = button.textContent;
+    button.dataset.originalLabel = originalLabel;
+    button.lastChild.textContent = "Opening Google...";
+
+    try {
+      const idToken = await googleIdToken();
+      const data = await submitGoogleAuth(button, idToken);
+      if (data?.needsName) {
+        openGoogleNameModal(button, idToken);
+      }
+    } catch (error) {
+      setGoogleError(container, error.message || "Unable to continue with Google.");
+    } finally {
+      button.disabled = false;
+      if (!button.closest("[hidden]")) {
+        button.lastChild.textContent = "Continue with Google";
+      }
+    }
+  });
+});
+
+document.querySelector("[data-google-name-cancel]")?.addEventListener("click", closeGoogleNameModal);
+
+document.querySelector("[data-google-name-submit]")?.addEventListener("click", async () => {
+  const modal = document.querySelector("[data-google-name-modal]");
+  const errorBox = modal?.querySelector("[data-google-name-error]");
+  const firstName = modal?.querySelector('input[name="google_first_name"]')?.value.trim() || "";
+  const lastName = modal?.querySelector('input[name="google_last_name"]')?.value.trim() || "";
+  if (errorBox) {
+    errorBox.hidden = true;
+    errorBox.textContent = "";
+  }
+  if (!pendingGoogleNameRequest) {
+    return;
+  }
+  if (!firstName || !lastName) {
+    if (errorBox) {
+      errorBox.textContent = "First and last name are required.";
+      errorBox.hidden = false;
+    }
+    return;
+  }
+  try {
+    await submitGoogleAuth(pendingGoogleNameRequest.button, pendingGoogleNameRequest.idToken, {
+      firstName,
+      lastName,
+    });
+  } catch (error) {
+    if (errorBox) {
+      errorBox.textContent = error.message || "Unable to finish Google signup.";
+      errorBox.hidden = false;
+    }
+  }
+});
+
 function closeDropdown(dropdown) {
   const trigger = dropdown.querySelector(".custom-select-trigger");
 

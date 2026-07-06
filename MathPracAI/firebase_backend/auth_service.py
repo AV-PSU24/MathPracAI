@@ -20,6 +20,29 @@ class AuthError(RuntimeError):
     pass
 
 
+def firebase_web_config():
+    api_key = os.environ.get("FIREBASE_WEB_API_KEY")
+    if not api_key:
+        raise AuthError("FIREBASE_WEB_API_KEY is required for Google sign in.")
+
+    project_id = (
+        os.environ.get("FIREBASE_PROJECT_ID")
+        or os.environ.get("GOOGLE_CLOUD_PROJECT")
+        or os.environ.get("GCLOUD_PROJECT")
+        or _project_id_from_service_account_json()
+    )
+    auth_domain = os.environ.get("FIREBASE_AUTH_DOMAIN")
+    if not auth_domain and project_id:
+        auth_domain = f"{project_id}.firebaseapp.com"
+
+    config = {"apiKey": api_key}
+    if auth_domain:
+        config["authDomain"] = auth_domain
+    if project_id:
+        config["projectId"] = project_id
+    return config
+
+
 def create_auth_user(email, password, first_name, last_name):
     if firebase_auth is None:
         raise AuthError("firebase-admin is not installed. Install requirements.txt first.")
@@ -77,6 +100,23 @@ def verify_id_token(id_token):
         return firebase_auth.verify_id_token(id_token)
     except FirebaseUnavailable as error:
         raise AuthError(str(error)) from error
+
+
+def google_user_from_id_token(id_token):
+    decoded = verify_id_token(id_token)
+    if decoded.get("firebase", {}).get("sign_in_provider") != "google.com":
+        raise AuthError("Use a Google account to continue.")
+    uid = decoded.get("uid")
+    email = decoded.get("email", "")
+    if not uid or not email:
+        raise AuthError("Google did not return a valid account.")
+    return {
+        "uid": uid,
+        "email": email,
+        "first_name": decoded.get("given_name", ""),
+        "last_name": decoded.get("family_name", ""),
+        "display_name": decoded.get("name", ""),
+    }
 
 
 def login_user(uid):
@@ -144,3 +184,14 @@ def _firebase_rest_error(detail):
         "USER_DISABLED": "This account has been disabled.",
         "INVALID_LOGIN_CREDENTIALS": "Invalid email or password.",
     }.get(message, "Unable to sign in with those credentials.")
+
+
+def _project_id_from_service_account_json():
+    raw = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+    if not raw:
+        return ""
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return ""
+    return data.get("project_id", "")

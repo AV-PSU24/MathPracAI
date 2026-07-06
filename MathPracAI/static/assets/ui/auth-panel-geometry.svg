@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 900" fill="none">
+  <!--
+    MathPracAI — Sign-in page left panel geometry
+    Static reference asset (animations live in theme.css via CSS classes)
+    Background: #0D0D0F  |  Shapes: white at low opacity
+  -->
+  <defs>
+    <pattern id="auth-dots" x="0" y="0" width="28" height="28" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="white" fill-opacity="0.065"/>
+    </pattern>
+    <radialGradient id="auth-vignette" cx="30%" cy="50%" r="80%">
+      <stop offset="0%"   stop-color="#0D0D0F" stop-opacity="0"/>
+      <stop offset="100%" stop-color="#0D0D0F" stop-opacity="0.65"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background fill -->
+  <rect width="560" height="900" fill="#0D0D0F"/>
+
+  <!-- Dot grid -->
+  <rect width="560" height="900" fill="url(#auth-dots)"/>
+
+  <!-- Large outer circle (auth-spin-slow 70s) -->
+  <circle cx="440" cy="680" r="340" stroke="white" stroke-opacity="0.09" stroke-width="1.5"/>
+  <circle cx="440" cy="680" r="265" stroke="white" stroke-opacity="0.05" stroke-width="1" stroke-dasharray="6 14"/>
+
+  <!-- Inner dashed ring (auth-spin-rev 45s) -->
+  <circle cx="440" cy="680" r="185" stroke="white" stroke-opacity="0.07" stroke-width="1" stroke-dasharray="3 18"/>
+
+  <!-- Top-left partial circle (static) -->
+  <circle cx="-30" cy="160" r="200" stroke="white" stroke-opacity="0.05" stroke-width="1"/>
+
+  <!-- Diagonal lines -->
+  <line x1="0"   y1="900" x2="560" y2="0"   stroke="white" stroke-opacity="0.03"  stroke-width="1"/>
+  <line x1="-60" y1="900" x2="500" y2="0"   stroke="white" stroke-opacity="0.025" stroke-width="1"/>
+  <line x1="60"  y1="900" x2="620" y2="0"   stroke="white" stroke-opacity="0.025" stroke-width="1"/>
+
+  <!-- Floating rect A (auth-float-a drift) -->
+  <rect x="60" y="220" width="140" height="140" rx="3"
+    stroke="white" stroke-opacity="0.11" stroke-width="1.5"/>
+
+  <!-- Floating rect B rotated (auth-float-b drift) -->
+  <rect x="350" y="140" width="90" height="90" rx="2"
+    stroke="white" stroke-opacity="0.09" stroke-width="1"
+    transform="rotate(18 395 185)"/>
+
+  <!-- Floating small square C (auth-float-c drift) -->
+  <rect x="200" y="520" width="44" height="44" rx="2"
+    stroke="white" stroke-opacity="0.12" stroke-width="1"
+    transform="rotate(-8 222 542)"/>
+
+  <!-- Math symbol ghost text -->
+  <text x="30"  y="660" font-family="Georgia,serif" font-size="112" fill="white" fill-opacity="0.035" font-style="italic">∫</text>
+  <text x="295" y="500" font-family="Georgia,serif" font-size="82"  fill="white" fill-opacity="0.03"  font-style="italic">∑</text>
+  <text x="128" y="332" font-family="Georgia,serif" font-size="64"  fill="white" fill-opacity="0.04"  font-style="italic">π</text>
+  <text x="375" y="412" font-family="Georgia,serif" font-size="46"  fill="white" fill-opacity="0.035" font-style="italic">f(x)</text>
+  <text x="46"  y="812" font-family="Georgia,serif" font-size="46"  fill="white" fill-opacity="0.04"  font-style="italic">∞</text>
+  <text x="278" y="762" font-family="Georgia,serif" font-size="38"  fill="white" fill-opacity="0.03"  font-style="italic">x²</text>
+  <text x="458" y="312" font-family="Georgia,serif" font-size="34"  fill="white" fill-opacity="0.03"  font-style="italic">Δ</text>
+
+  <!-- Hairline crosses -->
+  <line x1="270" y1="162" x2="270" y2="180" stroke="white" stroke-opacity="0.2"  stroke-width="1.5"/>
+  <line x1="261" y1="171" x2="279" y2="171" stroke="white" stroke-opacity="0.2"  stroke-width="1.5"/>
+  <line x1="487" y1="447" x2="487" y2="463" stroke="white" stroke-opacity="0.15" stroke-width="1.5"/>
+  <line x1="479" y1="455" x2="495" y2="455" stroke="white" stroke-opacity="0.15" stroke-width="1.5"/>
+  <line x1="88"  y1="489" x2="88"  y2="501" stroke="white" stroke-opacity="0.13" stroke-width="1.5"/>
+  <line x1="82"  y1="495" x2="94"  y2="495" stroke="white" stroke-opacity="0.13" stroke-width="1.5"/>
+
+  <!-- Pulsing dots (static in asset) -->
+  <circle cx="310" cy="200" r="4"   fill="white" fill-opacity="0.2"/>
+  <circle cx="80"  cy="582" r="3.5" fill="white" fill-opacity="0.18"/>
+  <circle cx="490" cy="542" r="3"   fill="white" fill-opacity="0.15"/>
+
+  <!-- Vignette overlay -->
+  <rect width="560" height="900" fill="url(#auth-vignette)"/>
+</svg>

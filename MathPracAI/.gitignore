@@ -1,0 +1,9 @@
+# Firebase
+firebase_service_account.json
+
+# Environment variables
+.env
+
+# Python
+__pycache__/
+*.pyc

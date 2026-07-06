@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 32" fill="none">
+  <!-- M mark -->
+  <rect width="24" height="24" x="0" y="4" rx="6" fill="white"/>
+  <text x="12" y="20.5" font-family="system-ui, sans-serif" font-size="13" font-weight="700" fill="#0D0D0F" text-anchor="middle">M</text>
+  <!-- Wordmark -->
+  <text x="32" y="22" font-family="system-ui, sans-serif" font-size="15" font-weight="600" fill="white" letter-spacing="-0.3">MathPracAI</text>
+</svg>

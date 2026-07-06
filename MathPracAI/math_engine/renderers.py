@@ -907,6 +907,16 @@ def short_unit_label(label):
     return re.sub(r"^Unit \d+:\s*", "", label)
 
 
+def icon(name):
+    paths = {
+        "lightbulb": """<path d="M15 14c.2-1 .7-1.7 1.5-2.5A5 5 0 1 0 8 11.5c.8.8 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/>""",
+        "skip-forward": """<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" x2="19" y1="5" y2="19"/>""",
+        "eye": """<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>""",
+        "arrow-right": """<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>""",
+    }
+    return f"""<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">{paths.get(name, "")}</svg>"""
+
+
 def select_options(options, selected):
     html = []
     for value, label in options:
@@ -1073,7 +1083,7 @@ def render_control_panel(context, units):
     return f"""      <aside class="sidebar-shell">
       <form class="control-panel" action="/generate" method="get">
         <div class="sidebar-brand">
-          <div class="brand-mark">M</div>
+          <img class="brand-mark-img" src="/static/assets/logos/mathpracai-mark.svg" alt="" aria-hidden="true">
           <span>MathPracAI</span>
         </div>
         <input type="hidden" name="ui_mode" value="practice">
@@ -1087,7 +1097,7 @@ def render_control_panel(context, units):
         {question_view_controls}
       </form>
       <div class="sidebar-footer">
-        <button class="secondary-action" type="button" data-open-test-modal>Start Test</button>
+        <button class="secondary-action start-test-action" type="button" data-open-test-modal>Start Test</button>
         {auth_profile}
       </div>
       </aside>"""
@@ -1190,11 +1200,11 @@ def render_answer_form(context):
     test_hidden_inputs = render_test_hidden_inputs(context)
     test_mode = context["ui_mode"] == "test_progress"
     practice_actions = "" if test_mode else f"""
-            <button class="btn btn-ghost" name="action" value="hint" type="submit"{hint_disabled}>Hint</button>
-            <button class="btn btn-ghost" name="action" value="skip" type="submit"{skip_disabled}>Skip</button>
-            <button class="btn btn-ghost" name="action" value="solution" type="submit"{solution_disabled}>Solution</button>"""
+            <button class="btn btn-ghost" name="action" value="hint" type="submit"{hint_disabled}>{icon("lightbulb")}Hint</button>
+            <button class="btn btn-ghost" name="action" value="skip" type="submit"{skip_disabled}>{icon("skip-forward")}Skip</button>
+            <button class="btn btn-ghost" name="action" value="solution" type="submit"{solution_disabled}>{icon("eye")}Solution</button>"""
     test_actions = (
-        f'<button class="btn btn-ghost" name="action" value="skip" type="submit"{skip_disabled}>Skip</button>'
+        f'<button class="btn btn-ghost" name="action" value="skip" type="submit"{skip_disabled}>{icon("skip-forward")}Skip</button>'
         if test_mode and not answered
         else ""
     )
@@ -1225,7 +1235,7 @@ def render_answer_form(context):
                 {practice_actions}
                 {test_actions}
               </div>
-              <button class="btn btn-accent" name="action" value="{primary_action}" type="submit">{primary_label}</button>
+              <button class="btn btn-accent" name="action" value="{primary_action}" type="submit">{primary_label}{icon("arrow-right") if primary_action == "next" else ""}</button>
             </div>
           </div>
         </form>"""
@@ -1665,6 +1675,7 @@ def render_page(state, units, generators, unit_label, topic_label, valid_topic_f
 </head>
 <body>
   <main class="app-frame">
+    <img class="practice-geometry" src="/static/assets/ui/practice-background-geometry.svg" alt="" aria-hidden="true">
     <section class="generator">
 {control_panel}
 

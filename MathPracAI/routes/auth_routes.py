@@ -1,9 +1,11 @@
-from flask import Blueprint, redirect, request, url_for
+from flask import Blueprint, jsonify, redirect, request, url_for
 
 from firebase_backend.auth_service import (
     AuthError,
     create_auth_user,
     current_user_profile,
+    firebase_web_config,
+    google_user_from_id_token,
     login_user,
     logout_user,
     role_redirect,
@@ -97,6 +99,7 @@ def student_signup():
             email=values["email"],
             role="student",
             tutor_id=class_code.get("tutorId"),
+            auth_provider="email",
         )
         login_user(profile["uid"])
     except Exception as error:
@@ -143,6 +146,7 @@ def tutor_signup():
             email=values["email"],
             role="tutor",
             tutor_id=None,
+            auth_provider="email",
         )
         mark_tutor_invite_code_used(invite["id"], uid)
         login_user(profile["uid"])
@@ -152,10 +156,141 @@ def tutor_signup():
     return redirect(url_for("dashboard.dashboard"))
 
 
+@auth_bp.get("/firebase-web-config")
+def firebase_config():
+    try:
+        return jsonify({"ok": True, "config": firebase_web_config()})
+    except AuthError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+
+
+@auth_bp.post("/google-login")
+def google_login():
+    try:
+        google_user = google_user_from_id_token(_json_value("idToken"))
+        profile = create_or_login_existing_google_profile(google_user)
+    except AuthError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+
+    login_user(profile["uid"])
+    return jsonify({"ok": True, "redirect": redirect_url_for_profile(profile)})
+
+
+@auth_bp.post("/student/google-signup")
+def student_google_signup():
+    try:
+        google_user = google_user_from_id_token(_json_value("idToken"))
+        existing_profile = create_or_login_existing_google_profile(google_user, allow_missing=False)
+        if existing_profile:
+            login_user(existing_profile["uid"])
+            return jsonify({"ok": True, "redirect": redirect_url_for_profile(existing_profile)})
+
+        class_code = class_code_profile(_json_value("classCode"))
+        if not class_code:
+            raise AuthError("Invalid class code.")
+
+        names = resolved_google_names(google_user)
+        if names is None:
+            return jsonify({"ok": False, "needsName": True})
+
+        profile = create_user_profile(
+            uid=google_user["uid"],
+            first_name=names["first_name"],
+            last_name=names["last_name"],
+            email=google_user["email"],
+            role="student",
+            tutor_id=class_code.get("tutorId"),
+            auth_provider="google",
+        )
+        login_user(profile["uid"])
+        return jsonify({"ok": True, "redirect": url_for("practice.index")})
+    except AuthError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    except Exception as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+
+
+@auth_bp.post("/tutor/google-signup")
+def tutor_google_signup():
+    try:
+        google_user = google_user_from_id_token(_json_value("idToken"))
+        existing_profile = create_or_login_existing_google_profile(google_user, allow_missing=False)
+        if existing_profile:
+            login_user(existing_profile["uid"])
+            return jsonify({"ok": True, "redirect": redirect_url_for_profile(existing_profile)})
+
+        invite = tutor_invite_profile(_json_value("inviteCode"))
+        if not invite:
+            raise AuthError("Invalid or used tutor invite code.")
+
+        names = resolved_google_names(google_user)
+        if names is None:
+            return jsonify({"ok": False, "needsName": True})
+
+        profile = create_user_profile(
+            uid=google_user["uid"],
+            first_name=names["first_name"],
+            last_name=names["last_name"],
+            email=google_user["email"],
+            role="tutor",
+            tutor_id=None,
+            auth_provider="google",
+        )
+        mark_tutor_invite_code_used(invite["id"], google_user["uid"])
+        login_user(profile["uid"])
+        return jsonify({"ok": True, "redirect": url_for("dashboard.dashboard")})
+    except AuthError as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+    except Exception as error:
+        return jsonify({"ok": False, "error": str(error)}), 400
+
+
 @auth_bp.post("/logout")
 def logout():
     logout_user()
     return redirect(url_for("auth.auth_home"))
+
+
+def create_or_login_existing_google_profile(google_user, allow_missing=True):
+    profile = current_profile_for_uid(google_user["uid"])
+    if profile:
+        return profile
+    if allow_missing:
+        raise AuthError("This Google account does not have a MathPracAI profile yet.")
+    return None
+
+
+def current_profile_for_uid(uid):
+    from firebase_backend.firestore_service import get_user_profile
+
+    return get_user_profile(uid)
+
+
+def resolved_google_names(google_user):
+    first_name = _json_value("firstName") or google_user.get("first_name", "")
+    last_name = _json_value("lastName") or google_user.get("last_name", "")
+    if (not first_name or not last_name) and google_user.get("display_name"):
+        parts = google_user["display_name"].strip().split()
+        if not first_name and parts:
+            first_name = parts[0]
+        if not last_name and len(parts) > 1:
+            last_name = " ".join(parts[1:])
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+    if not first_name or not last_name:
+        return None
+    return {"first_name": first_name, "last_name": last_name}
+
+
+def redirect_url_for_profile(profile):
+    if profile.get("role") == "student":
+        return url_for("practice.index")
+    return url_for("dashboard.dashboard")
+
+
+def _json_value(key):
+    data = request.get_json(silent=True) or {}
+    return str(data.get(key) or "").strip()
 
 
 def _form_values(*keys):

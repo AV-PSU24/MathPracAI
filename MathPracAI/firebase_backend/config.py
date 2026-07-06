@@ -1,10 +1,17 @@
 import json
 import os
+import threading
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 _firebase_admin = None
 _credentials = None
 _firestore = None
+_firebase_init_lock = threading.Lock()
 
 try:
     import firebase_admin as _firebase_admin
@@ -29,17 +36,21 @@ def initialize_firebase():
     if _firebase_admin._apps:
         return _firebase_admin.get_app()
 
-    service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
-    service_account_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    with _firebase_init_lock:
+        if _firebase_admin._apps:
+            return _firebase_admin.get_app()
 
-    if service_account_json:
-        cred = _credentials.Certificate(json.loads(service_account_json))
-    elif service_account_path:
-        cred = _credentials.Certificate(service_account_path)
-    else:
-        cred = _credentials.ApplicationDefault()
+        service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON")
+        service_account_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
 
-    return _firebase_admin.initialize_app(cred)
+        if service_account_json:
+            cred = _credentials.Certificate(json.loads(service_account_json))
+        elif service_account_path:
+            cred = _credentials.Certificate(service_account_path)
+        else:
+            cred = _credentials.ApplicationDefault()
+
+        return _firebase_admin.initialize_app(cred)
 
 
 def firestore_client():
