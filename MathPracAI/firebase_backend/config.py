@@ -2,10 +2,10 @@ import json
 import os
 import threading
 
-from dotenv import load_dotenv
+from config.env import load_environment
 
 
-load_dotenv()
+load_environment()
 
 
 _firebase_admin = None
