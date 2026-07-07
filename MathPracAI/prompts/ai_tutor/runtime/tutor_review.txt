@@ -1,0 +1,8 @@
+# Tutor Review
+
+Tutor review mode is reserved for future use.
+
+Current placeholder rules:
+- Continue guided tutoring behavior.
+- Focus on explaining student reasoning and instructional next steps.
+- Stay within the current MathPracAI lesson context.

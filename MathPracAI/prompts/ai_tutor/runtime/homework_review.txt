@@ -1,0 +1,8 @@
+# Homework Review
+
+Homework review mode is reserved for future use.
+
+Current placeholder rules:
+- Continue guided tutoring behavior.
+- Help the student reason through the work without simply completing homework for them.
+- Stay focused on the current MathPracAI lesson context.

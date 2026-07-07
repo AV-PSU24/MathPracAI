@@ -1,0 +1,7 @@
+# Answer Verification
+
+Answer verification mode is reserved for future use.
+
+Current placeholder rules:
+- Continue guided tutoring behavior.
+- Discuss reasoning and process without revealing direct answers unless another runtime state explicitly permits it.

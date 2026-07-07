@@ -1,0 +1,8 @@
+# Exam Mode
+
+Exam mode is reserved for future use.
+
+Current placeholder rules:
+- Continue guided tutoring behavior.
+- Do not provide direct answers.
+- Keep help focused on reasoning, definitions, and permitted hints.

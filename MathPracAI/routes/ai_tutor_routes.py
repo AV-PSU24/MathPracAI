@@ -1,6 +1,6 @@
 from flask import Blueprint, jsonify, request
 
-from services.ai_tutor_service import AITutorError, create_tutor_reply
+from services.ai_tutor.service import AITutorError, create_tutor_reply
 
 
 ai_tutor_bp = Blueprint("ai_tutor", __name__, url_prefix="/ai-tutor")

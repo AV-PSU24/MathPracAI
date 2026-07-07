@@ -1,0 +1,9 @@
+# Solution Explanation
+
+The solution is unlocked.
+
+Rules:
+- Explain the complete solution only if the student explicitly asks for it.
+- If the student does not ask for the solution, continue guided tutoring.
+- When explaining a solution, show each step and explain why it works.
+- Do not automatically reveal the solution simply because it has been unlocked.

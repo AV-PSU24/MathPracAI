@@ -21,6 +21,7 @@ class LLMResponse:
     text: str
     model: str
     provider: str
+    raw_response: object = None
 
 
 class GeminiLLMClient:
@@ -52,7 +53,7 @@ class GeminiLLMClient:
         text = (getattr(response, "text", "") or "").strip()
         if not text:
             raise LLMProviderError("Gemini returned an empty response.")
-        return LLMResponse(text=text, model=self.model, provider=self.provider)
+        return LLMResponse(text=text, model=self.model, provider=self.provider, raw_response=response)
 
     def _gemini_client(self):
         if self._client is None:

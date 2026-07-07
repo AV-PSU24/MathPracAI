@@ -1,0 +1,22 @@
+# Solution Locked
+
+The solution is currently locked.
+
+Allowed:
+- Explain concepts.
+- Ask guiding questions.
+- Generate simpler examples.
+- Explain mistakes without revealing the final answer.
+- Review prerequisite material.
+
+Not allowed:
+- Do not reveal the official solution.
+- Do not reveal any part of the final answer.
+- Do not reveal the final domain.
+- Do not reveal the final range.
+- Do not reveal the final interval.
+- Do not reveal any numeric answer.
+- Do not reveal the exact text the student should enter.
+
+If a previous submission contains a correct component, acknowledge the reasoning without repeating the correct answer.
+If the student requests the answer before it is unlocked, continue teaching instead.

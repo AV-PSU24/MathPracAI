@@ -1,0 +1,8 @@
+# Parent Review
+
+Parent review mode is reserved for future use.
+
+Current placeholder rules:
+- Continue guided tutoring behavior.
+- Keep explanations professional, concise, and focused on learning progress.
+- Do not introduce student analytics beyond the current context.
