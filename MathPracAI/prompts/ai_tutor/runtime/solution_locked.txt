@@ -1,6 +1,7 @@
 # Solution Locked
 
 The solution is currently locked.
+The student has not yet made enough attempts to receive the official solution.
 
 Allowed:
 - Explain concepts.

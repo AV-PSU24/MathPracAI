@@ -980,10 +980,11 @@ def page_context(state, units, generators, valid_topic_for_unit, count_value):
     hint_visible = state.get("hint_visible", "") == "true"
     solution_visible = state.get("solution_visible", "") == "true"
     answered = state.get("answered", "") == "true"
-    correct_count = count_value(state, "correct_count")
+    solved_count = count_value(state, "solved_count")
     hint_count = count_value(state, "hint_count")
-    incorrect_count = count_value(state, "incorrect_count")
     skip_count = count_value(state, "skip_count")
+    problem_counted = state.get("problem_counted", "")
+    problem_help_status = state.get("problem_help_status", "none")
     generated = state.get("generated", "") == "true"
     active_question_view = state.get("active_question_view", "equation")
     question_view_options = question_view_options_for_topic(topic)
@@ -1043,10 +1044,11 @@ def page_context(state, units, generators, valid_topic_for_unit, count_value):
         "hint_visible": hint_visible,
         "solution_visible": solution_visible,
         "answered": answered,
-        "correct_count": correct_count,
+        "solved_count": solved_count,
         "hint_count": hint_count,
-        "incorrect_count": incorrect_count,
         "skip_count": skip_count,
+        "problem_counted": problem_counted,
+        "problem_help_status": problem_help_status,
         "generated": generated,
         "active_question_view": active_question_view,
         "question_view_options": question_view_options,
@@ -1087,10 +1089,11 @@ def render_control_panel(context, units):
           <span>MathPracAI</span>
         </div>
         <input type="hidden" name="ui_mode" value="practice">
-        <input type="hidden" name="correct_count" value="{context["correct_count"]}">
+        <input type="hidden" name="solved_count" value="{context["solved_count"]}">
         <input type="hidden" name="hint_count" value="{context["hint_count"]}">
-        <input type="hidden" name="incorrect_count" value="{context["incorrect_count"]}">
         <input type="hidden" name="skip_count" value="{context["skip_count"]}">
+        <input type="hidden" name="problem_counted" value="{escape(context["problem_counted"])}">
+        <input type="hidden" name="problem_help_status" value="{escape(context["problem_help_status"])}">
         {unit_dropdown}
         {topic_dropdown}
         {problem_config_controls}
@@ -1216,10 +1219,11 @@ def render_answer_form(context):
           <input type="hidden" name="hint_visible" value="{str(hint_visible).lower()}">
           <input type="hidden" name="solution_visible" value="{str(solution_visible).lower()}">
           <input type="hidden" name="answered" value="{str(answered).lower()}">
-          <input type="hidden" name="correct_count" value="{context["correct_count"]}">
+          <input type="hidden" name="solved_count" value="{context["solved_count"]}">
           <input type="hidden" name="hint_count" value="{context["hint_count"]}">
-          <input type="hidden" name="incorrect_count" value="{context["incorrect_count"]}">
           <input type="hidden" name="skip_count" value="{context["skip_count"]}">
+          <input type="hidden" name="problem_counted" value="{escape(context["problem_counted"])}">
+          <input type="hidden" name="problem_help_status" value="{escape(context["problem_help_status"])}">
           <input type="hidden" name="generated" value="{str(generated).lower()}">
           <input type="hidden" name="question_view_equation" value="{str(context["question_view_selections"].get("equation", False)).lower()}">
           <input type="hidden" name="question_view_graph" value="{str(context["question_view_selections"].get("graph", False)).lower()}">
@@ -1327,9 +1331,8 @@ def render_help_stack(context):
 
 def render_stats(context):
     return f"""        <div class="stats-panel" aria-label="Practice stats">
-          <span class="stat-correct">Correct: {context["correct_count"]}</span>
+          <span class="stat-solved">Solved: {context["solved_count"]}</span>
           <span class="stat-hints">Hints: {context["hint_count"]}</span>
-          <span class="stat-incorrect">Incorrect: {context["incorrect_count"]}</span>
           <span class="stat-skips">Skips: {context["skip_count"]}</span>
         </div>"""
 

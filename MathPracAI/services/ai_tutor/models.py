@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Optional
 
 from llm.llm_client import LLMResponse
@@ -16,7 +16,7 @@ class MiloSession:
     attempt_count: int = 0
     solution_unlocked: bool = False
     help_status: str = "none"
-    runtime_state: RuntimeState = RuntimeState.SOLUTION_LOCKED
+    runtime_state: RuntimeState = RuntimeState.GUIDED_LEARNING
     tutor_metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -30,10 +30,13 @@ class MiloSession:
             attempts=_list_of_dicts(context.get("attempts")),
             chat_history=_list_of_dicts(context.get("chatHistory")),
             attempt_count=_int_value(context.get("attemptCount")),
-            solution_unlocked=bool(context.get("solutionUnlocked")),
+            solution_unlocked=_bool_value(context.get("solutionUnlocked")),
             help_status=str(context.get("helpStatus") or "none").strip() or "none",
             tutor_metadata=_dict_value(context.get("tutorMetadata")),
         )
+
+    def with_runtime_state(self, runtime_state):
+        return replace(self, runtime_state=runtime_state)
 
 
 @dataclass(frozen=True)
@@ -76,3 +79,11 @@ def _int_value(value):
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _bool_value(value):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)

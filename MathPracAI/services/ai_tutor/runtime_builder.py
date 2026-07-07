@@ -1,5 +1,6 @@
 from enum import Enum
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,12 +31,46 @@ RUNTIME_PROMPT_FILES = {
 
 
 def determine_runtime_state(session):
-    if session.solution_unlocked:
-        return RuntimeState.SOLUTION_EXPLANATION
-    return RuntimeState.SOLUTION_LOCKED
+    message = session.student_message.lower()
+    if asks_for_answer_verification(message):
+        return RuntimeState.ANSWER_VERIFICATION
+    if asks_for_solution(message):
+        if session.attempt_count >= 3 or session.solution_unlocked:
+            return RuntimeState.SOLUTION_EXPLANATION
+        return RuntimeState.SOLUTION_LOCKED
+    return RuntimeState.GUIDED_LEARNING
+
+
+def asks_for_solution(message):
+    patterns = (
+        r"\bgive me (the )?(answer|solution)\b",
+        r"\bjust (give|tell|show) me\b",
+        r"\bshow me (the )?(solution|answer)\b",
+        r"\btell me (the )?(answer|solution)\b",
+        r"\btell me exactly what to type\b",
+        r"\bwhat should i type\b",
+        r"\bi give up\b",
+        r"\bfinal answer\b",
+        r"\breveal (the )?(solution|answer)\b",
+    )
+    return any(re.search(pattern, message) for pattern in patterns)
+
+
+def asks_for_answer_verification(message):
+    patterns = (
+        r"\bis (this|that|my answer|the answer) correct\b",
+        r"\bam i right\b",
+        r"\bdid i get (it|this|that) right\b",
+        r"\bwould the answer be\b",
+        r"\bcould the answer be\b",
+        r"\bdoes .* look correct\b",
+        r"\bcheck my answer\b",
+        r"\bverify my answer\b",
+    )
+    return any(re.search(pattern, message) for pattern in patterns)
 
 
 def build_runtime_prompt(session):
-    runtime_state = determine_runtime_state(session)
+    runtime_state = session.runtime_state
     prompt_path = RUNTIME_PROMPT_FILES[runtime_state]
     return runtime_state, prompt_path.read_text(encoding="utf-8").strip()

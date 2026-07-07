@@ -674,13 +674,12 @@ input:disabled {
   background: #ffffff;
 }
 
-.stat-correct,
+.stat-solved,
 .score-ok,
 .grade-excellent {
   color: var(--ok);
 }
 
-.stat-incorrect,
 .score-bad,
 .grade-needs-work {
   color: var(--danger);

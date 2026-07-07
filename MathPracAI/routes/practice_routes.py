@@ -56,6 +56,37 @@ def count_value(state, key):
         return 0
 
 
+def problem_already_counted(state):
+    return state.get("problem_counted") == "true"
+
+
+def count_problem_once(state, outcome):
+    if problem_already_counted(state):
+        return
+    if outcome == "solved":
+        state["solved_count"] = str(count_value(state, "solved_count") + 1)
+    elif outcome == "hint":
+        state["hint_count"] = str(count_value(state, "hint_count") + 1)
+    elif outcome == "skipped":
+        state["skip_count"] = str(count_value(state, "skip_count") + 1)
+    state["problem_counted"] = "true"
+
+
+def mark_help_status(state, status):
+    current = state.get("problem_help_status", "none")
+    if current == "solution" and status == "hint":
+        return
+    state["problem_help_status"] = status
+
+
+def outcome_for_correct_submission(state):
+    if state.get("problem_help_status") == "hint":
+        return "hint"
+    if state.get("problem_help_status") == "solution":
+        return "solved"
+    return "solved"
+
+
 def question_view_field(view):
     return f"question_view_{view}"
 
@@ -112,6 +143,8 @@ def reset_for_new_problem(state):
     state["hint_visible"] = ""
     state["solution_visible"] = ""
     state["answered"] = ""
+    state["problem_counted"] = ""
+    state["problem_help_status"] = "none"
     state["feedback"] = ""
     state["feedback_type"] = "empty"
 
@@ -285,6 +318,8 @@ def generate():
     query["hint_visible"] = ""
     query["solution_visible"] = ""
     query["answered"] = ""
+    query["problem_counted"] = ""
+    query["problem_help_status"] = "none"
     query["generated"] = "true"
     return render_app_page(query)
 
@@ -304,10 +339,11 @@ def check():
         "hint_visible": data.get("hint_visible", ""),
         "solution_visible": data.get("solution_visible", ""),
         "answered": data.get("answered", ""),
-        "correct_count": data.get("correct_count", "0"),
+        "solved_count": data.get("solved_count", "0"),
         "hint_count": data.get("hint_count", "0"),
-        "incorrect_count": data.get("incorrect_count", "0"),
         "skip_count": data.get("skip_count", "0"),
+        "problem_counted": data.get("problem_counted", ""),
+        "problem_help_status": data.get("problem_help_status", "none"),
         "generated": data.get("generated", "true"),
         "question_view_equation": data.get("question_view_equation", ""),
         "question_view_graph": data.get("question_view_graph", ""),
@@ -322,7 +358,8 @@ def check():
         state["feedback"] = ""
         state["feedback_type"] = "empty"
         state["hint_visible"] = "true"
-        state["hint_count"] = str(count_value(state, "hint_count") + 1)
+        mark_help_status(state, "hint")
+        count_problem_once(state, "hint")
         if state.get("ui_mode") == "test_progress":
             state["test_hints"] = str(count_value(state, "test_hints") + 1)
     elif action == "solution":
@@ -330,6 +367,8 @@ def check():
         state["feedback_type"] = "empty"
         state["solution_visible"] = "true"
         state["answered"] = "true"
+        mark_help_status(state, "solution")
+        count_problem_once(state, "solved")
     elif action == "next":
         if state.get("ui_mode") == "test_progress":
             next_test_problem(state)
@@ -342,13 +381,14 @@ def check():
             add_breakdown_result(state, "skipped")
             next_test_problem(state)
         else:
-            state["skip_count"] = str(count_value(state, "skip_count") + 1)
+            mark_help_status(state, "skipped")
+            count_problem_once(state, "skipped")
             reset_for_new_problem(state)
             state["generated"] = "true"
     elif answers_match_problem(user_answer, problem):
         state["feedback"] = "Correct."
         state["feedback_type"] = "correct"
-        state["correct_count"] = str(count_value(state, "correct_count") + 1)
+        count_problem_once(state, outcome_for_correct_submission(state))
         state["answered"] = "true"
         if state.get("ui_mode") == "test_progress":
             state["test_correct"] = str(count_value(state, "test_correct") + 1)
@@ -356,7 +396,6 @@ def check():
     else:
         state["feedback"] = "Not quite. Try again or open the hint."
         state["feedback_type"] = "incorrect"
-        state["incorrect_count"] = str(count_value(state, "incorrect_count") + 1)
         state["answered"] = "true"
         if state.get("ui_mode") == "test_progress":
             state["test_incorrect"] = str(count_value(state, "test_incorrect") + 1)
