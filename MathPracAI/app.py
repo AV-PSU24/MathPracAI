@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from flask import Flask, send_from_directory
+from flask import Flask, redirect, send_from_directory, url_for
 
 from routes.auth_routes import auth_bp
 from routes.dashboard_routes import dashboard_bp
@@ -22,6 +22,10 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(practice_bp)
+
+    @app.get("/")
+    def root():
+        return redirect(url_for("auth.auth_home"))
 
     @app.get("/styles.css")
     def styles():
