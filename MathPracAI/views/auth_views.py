@@ -215,7 +215,6 @@ def auth_provider_choices(endpoint, role, class_code="", invite_code=""):
           data-class-code="{escape(class_code)}"
           data-invite-code="{escape(invite_code)}"
         ><span class="google-mark">G</span>Continue with Google</button>
-        <a class="auth-provider-button email-provider" href="#email-auth-form">{icon("mail")}Continue with Email</a>
         <p class="auth-google-error" data-google-auth-error hidden></p>
       </div>
       <div class="auth-divider"><span>or</span></div>"""
