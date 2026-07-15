@@ -1,6 +1,7 @@
 import json
 import os
 import threading
+from pathlib import Path
 
 from config.env import load_environment
 
@@ -46,7 +47,10 @@ def initialize_firebase():
         if service_account_json:
             cred = _credentials.Certificate(json.loads(service_account_json))
         elif service_account_path:
-            cred = _credentials.Certificate(service_account_path)
+            service_account_path = Path(service_account_path)
+            if not service_account_path.is_absolute():
+                service_account_path = Path(__file__).resolve().parent / service_account_path
+            cred = _credentials.Certificate(str(service_account_path))
         else:
             cred = _credentials.ApplicationDefault()
 
